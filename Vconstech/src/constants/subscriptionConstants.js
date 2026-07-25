@@ -10,7 +10,7 @@ export const TABLE_HEADERS = [
   "Status",
   "Expires",
   "Renews",
-  "",
+  "Notify",
 ];
 
 export const EMPTY_FILTERS = {

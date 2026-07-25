@@ -1,0 +1,1 @@
+Project structure template generated from uploaded server file.

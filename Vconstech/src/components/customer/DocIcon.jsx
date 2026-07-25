@@ -4,7 +4,7 @@ export default function DocIcon() {
       width="18"
       height="18"
       fill="none"
-      stroke="#9ca3af"
+      stroke="#798497"
       strokeWidth="1.5"
       viewBox="0 0 24 24"
     >

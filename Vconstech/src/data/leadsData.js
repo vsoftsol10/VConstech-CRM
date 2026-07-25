@@ -1,0 +1,117 @@
+export const leadsData = [
+  {
+    id: 1,
+    stage: "New",
+    count: 12,
+    leads: [
+      {
+        id: 101,
+        name: "Marcus Tate",
+        company: "Construction",
+        email: "Sandy@gmail.com",
+        phone: "6248763864",
+        plan: "Basic",
+      },
+      {
+        id: 102,
+        name: "Sarah Connor",
+        company: "TechCorp",
+        email: "sarah@gmail.com",
+        phone: "6248763865",
+        plan: "Premium",
+      },
+    ],
+  },
+  {
+    id: 2,
+    stage: "Contacted",
+    count: 8,
+    leads: [
+      {
+        id: 201,
+        name: "Marcus Tate",
+        company: "Construction",
+        email: "Sandy@gmail.com",
+        phone: "6248763864",
+        plan: "Basic",
+      },
+      {
+        id: 202,
+        name: "John Smith",
+        company: "BuildCo",
+        email: "john@gmail.com",
+        phone: "6248763866",
+        plan: "Advance",
+      },
+    ],
+  },
+  {
+    id: 3,
+    stage: "Qualified",
+    count: 6,
+    leads: [
+      {
+        id: 301,
+        name: "Marcus Tate",
+        company: "Construction",
+        email: "Sandy@gmail.com",
+        phone: "6248763864",
+        plan: "Premium",
+      },
+      {
+        id: 302,
+        name: "Emily Rose",
+        company: "DesignHub",
+        email: "emily@gmail.com",
+        phone: "6248763867",
+        plan: "Basic",
+      },
+    ],
+  },
+  {
+    id: 4,
+    stage: "Proposal",
+    count: 4,
+    leads: [
+      {
+        id: 401,
+        name: "Marcus Tate",
+        company: "Construction",
+        email: "Sandy@gmail.com",
+        phone: "6248763864",
+        plan: "Advance",
+      },
+      {
+        id: 402,
+        name: "Lisa Park",
+        company: "StartupX",
+        email: "lisa@gmail.com",
+        phone: "6248763868",
+        plan: "Premium",
+      },
+    ],
+  },
+  {
+    id: 5,
+    stage: "Won",
+    count: 3,
+    leads: [
+      {
+        id: 501,
+        name: "Marcus Tate",
+        company: "Construction",
+        email: "Sandy@gmail.com",
+        phone: "6248763864",
+        plan: "Basic",
+      },
+      {
+        id: 502,
+        name: "David Kim",
+        company: "FinanceGroup",
+        email: "david@gmail.com",
+        phone: "6248763869",
+        plan: "Advance",
+      },
+    ],
+  },
+];

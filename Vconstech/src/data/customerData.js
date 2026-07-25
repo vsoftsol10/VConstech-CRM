@@ -1,7 +1,7 @@
 export const stats = [
   { label: "Subscription", value: "2,438", sub: "↑ 128 this Week", badge: "42.4%", badgeType: "up" },
-  { label: "Renewals", value: "412", sub: "↓ 23 this week", badge: "more", badgeType: "down" },
-  { label: "Customer Activity", value: "57", sub: "Next 30 days", badge: "more", badgeType: "down" },
+  { label: "Renewals", value: "412", sub: "↓ 23 this week", badge: "45.1%", badgeType: "down" },
+  { label: "Customer Activity", value: "57", sub: "Next 30 days", badge: "21.4%", badgeType: "down" },
   { label: "Retention", value: "9,860", sub: "this Month", badge: "42.4%", badgeType: "up" },
 ];
 

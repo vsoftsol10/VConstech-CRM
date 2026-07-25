@@ -1,40 +1,24 @@
 import { useState } from "react";
 import { AnimatePresence } from "framer-motion";
 
-import DropdownMenu from "./DropdownMenu";
 import SendReminderModal from "../modal/SendReminderModal";
+import { BellIcon } from "../icons/SubscriptionIcons";
 
-export default function ActionMenu({ row,
-  onDelete, }) {
-  const [open, setOpen] = useState(false);
-
+export default function ActionMenu({ row, onReminderSent }) {
   const [modalRow, setModalRow] = useState(null);
 
   return (
     <>
-      <div className="relative">
-
+      <div className="flex justify-center">
         <button
-          onClick={() => setOpen((v) => !v)}
-          className="text-gray-400 hover:text-gray-700 font-bold text-lg leading-none active:scale-95 transition-transform duration-150 px-2"
+          type="button"
+          onClick={() => setModalRow(row)}
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500 transition-all duration-200 hover:border-yellow-300 hover:bg-[#FFFBF0] hover:text-[#C89B00] active:scale-95"
+          aria-label="Notify customer"
+          title="Notify customer"
         >
-          ⋮
+          <BellIcon />
         </button>
-
-        <AnimatePresence>
-          {open && (
-           <DropdownMenu
-  row={row}
-  onClose={() => setOpen(false)}
-  onDelete={onDelete}
-  onNotification={(r) => {
-    setModalRow(r);
-    setOpen(false);
-  }}
-/>
-          )}
-        </AnimatePresence>
-
       </div>
 
       <AnimatePresence>
@@ -42,6 +26,10 @@ export default function ActionMenu({ row,
           <SendReminderModal
             row={modalRow}
             onClose={() => setModalRow(null)}
+            onReminderSent={(updatedRow) => {
+              setModalRow(null);
+              onReminderSent?.(updatedRow);
+            }}
           />
         )}
       </AnimatePresence>

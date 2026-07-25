@@ -1,15 +1,12 @@
-
-import { useState, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-
+import { useEffect, useState, useRef } from "react";
+import axios from "axios";
+import { useNavigate } from "react-router-dom";
 import SubscriptionStats from "../components/subscription/stats/SubscriptionStats";
 import SearchBar from "../components/subscription/filters/SearchBar";
-import FilterPanel from "../components/subscription/filters/FilterPanel";
 import FilterChips from "../components/subscription/filters/FilterChips";
 import SubscriptionTable from "../components/subscription/table/SubscriptionTable";
 import SubscriptionMobileCards from "../components/subscription/table/SubscriptionMobileCards";
 
-import { subscriptions } from "../data/subscriptionData";
 import { EMPTY_FILTERS } from "../constants/subscriptionConstants";
 import { parseExpire } from "../utils/subscriptionUtils";
 
@@ -17,11 +14,23 @@ export default function SubscriptionPage() {
   const [tableSearch, setTableSearch] = useState("");
   const [showFilter, setShowFilter] = useState(false);
   const [activeFilters, setActiveFilters] = useState(EMPTY_FILTERS);
-
+  const navigate = useNavigate();
   const filterBtnRef = useRef(null);
+  const [subscriptions, setSubscriptions] = useState([]);
+  const hasDateFilter = activeFilters.expireFrom || activeFilters.expireTo;
 
-  const hasDateFilter =
-    activeFilters.expireFrom || activeFilters.expireTo;
+  useEffect(() => {
+    const loadCustomers = async () => {
+      try {
+        const res = await axios.get("http://localhost:5000/api/customers");
+        setSubscriptions(res.data);
+      } catch (err) {
+        console.log("API error:", err);
+      }
+    };
+
+    loadCustomers();
+  }, []);
 
   const activeCount =
     activeFilters.plans.length +
@@ -29,22 +38,24 @@ export default function SubscriptionPage() {
     (hasDateFilter ? 1 : 0);
 
   const filtered = subscriptions.filter((s) => {
+    const name = (s.customer_name || "").toLowerCase();
+    const plan = (s.subscription_plan || "").toLowerCase();
+    const search = tableSearch.toLowerCase();
     const matchSearch =
-      s.name.toLowerCase().includes(tableSearch.toLowerCase()) ||
-      s.plan.toLowerCase().includes(tableSearch.toLowerCase());
-
+      name.includes(search) ||
+      plan.includes(search);
     const matchPlan =
       activeFilters.plans.length === 0 ||
-      activeFilters.plans.includes(s.plan);
+      activeFilters.plans.includes(s.subscription_plan || s.plan);
 
     const matchStatus =
       activeFilters.statuses.length === 0 ||
-      activeFilters.statuses.includes(s.status);
+      activeFilters.statuses.includes(s.active ? "Active" : "Expiring");
 
     let matchDate = true;
 
     if (activeFilters.expireFrom || activeFilters.expireTo) {
-      const exp = parseExpire(s.expire);
+      const exp = parseExpire(s.renewal_date || s.expire);
 
       if (activeFilters.expireFrom)
         matchDate =
@@ -66,20 +77,25 @@ export default function SubscriptionPage() {
   });
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
-      <main className="flex-1 p-4 md:p-6">
+    <div className="flex min-h-screen flex-col">
+      <main className="flex-1 p-4 md:p-1">
 
-        <motion.h1
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-5"
-        >
-          Subscription
-        </motion.h1>
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-[22px] font-bold text-[#111111] sm:text-[28px] md:text-[32px]">
+            Subscription
+          </h1>
 
-        <SubscriptionStats />
+          <button
+            onClick={() => navigate("/SubscriptionPlans")}
+            className="h-10 rounded-xl bg-yellow-400 px-4 text-sm font-semibold text-black shadow-md shadow-yellow-200 transition-all hover:scale-[1.02] hover:bg-yellow-500 active:scale-95"
+          >
+            Plans
+          </button>
+        </div>
 
-        <div className="bg-white rounded-xl border border-gray-100">
+        <SubscriptionStats customers={subscriptions} />
+
+        <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
 
           <SearchBar
             tableSearch={tableSearch}
@@ -88,18 +104,9 @@ export default function SubscriptionPage() {
             showFilter={showFilter}
             setShowFilter={setShowFilter}
             filterBtnRef={filterBtnRef}
+            activeFilters={activeFilters}
+            setActiveFilters={setActiveFilters}
           />
-
-          <AnimatePresence>
-            {showFilter && (
-              <FilterPanel
-                filters={activeFilters}
-                onApply={(f) => setActiveFilters(f)}
-                onReset={() => setActiveFilters(EMPTY_FILTERS)}
-                onClose={() => setShowFilter(false)}
-              />
-            )}
-          </AnimatePresence>
 
           <FilterChips
             activeFilters={activeFilters}
@@ -107,9 +114,26 @@ export default function SubscriptionPage() {
             activeCount={activeCount}
           />
 
-          <SubscriptionTable filtered={filtered} />
-
-          <SubscriptionMobileCards filtered={filtered} />
+          <SubscriptionTable
+            filtered={filtered}
+            onReminderSent={(updatedRow) =>
+              setSubscriptions((prev) =>
+                prev.map((item) =>
+                  item.id === updatedRow.id ? { ...item, ...updatedRow } : item
+                )
+              )
+            }
+          />
+          <SubscriptionMobileCards
+            filtered={filtered}
+            onReminderSent={(updatedRow) =>
+              setSubscriptions((prev) =>
+                prev.map((item) =>
+                  item.id === updatedRow.id ? { ...item, ...updatedRow } : item
+                )
+              )
+            }
+          />
 
         </div>
       </main>
