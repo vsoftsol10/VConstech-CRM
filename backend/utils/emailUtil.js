@@ -1,10 +1,16 @@
 const transporter = require("../config/email");
 
+const getSender = () => {
+  const email = process.env.SMTP_FROM_EMAIL || process.env.EMAIL_USER || process.env.SMTP_USER;
+  const name = process.env.SMTP_FROM_NAME || "Vconstech";
+  return email ? `"${name}" <${email}>` : undefined;
+};
+
 // ── Send Welcome Email ──────────────────────────────────────────────────────
 const sendWelcomeEmail = async (name, email, employeeId, autoPassword) => {
   try {
     await transporter.sendMail({
-      from: process.env.EMAIL_USER,
+      from: getSender(),
       to: email,
       subject: "CRM Login Credentials",
       html: `
@@ -103,7 +109,7 @@ const sendPasswordResetEmail = async (email, resetToken) => {
     const resetLink = `http://localhost:5173/reset-password/${resetToken}`;
 
     await transporter.sendMail({
-      from: process.env.EMAIL_USER,
+      from: getSender(),
       to: email,
       subject: "Reset Your Password",
       html: `
@@ -161,7 +167,7 @@ const sendSubscriptionReminderEmail = async ({
   if (!email) return { sent: false, reason: "missing_email" };
 
   await transporter.sendMail({
-    from: process.env.EMAIL_USER,
+    from: getSender(),
     to: email,
     subject: subject || "Subscription Renewal Reminder",
     html: `
@@ -190,7 +196,7 @@ const sendSubscriptionExpiredEmail = async ({ name, email, companyName }) => {
   if (!email) return { sent: false, reason: "missing_email" };
 
   await transporter.sendMail({
-    from: process.env.EMAIL_USER,
+    from: getSender(),
     to: email,
     subject: "Your Subscription Has Expired",
     html: `
@@ -216,7 +222,7 @@ const sendErpInvitationEmail = async ({ name, email, invitationUrl, invitationId
   if (!email) return { sent: false, reason: "missing_email" };
 
   await transporter.sendMail({
-    from: process.env.EMAIL_USER,
+    from: getSender(),
     to: email,
     subject: "Complete your Vconstech ERP registration",
     html: `
