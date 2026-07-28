@@ -129,28 +129,30 @@ const addTeamMember = async (req, res) => {
       [name, phone, email, department, role, designation, employeeId, dateJoined || null, profileImage, hashedPassword]
     );
 
-    sendWelcomeEmail(name, email, employeeId, autoPassword)
-      .then(() => {
-        console.log("[Email] Welcome email sent", {
-          email,
-          employeeId,
-        });
-      })
-      .catch((error) => {
-        console.error("[Email] Failed to send welcome email", {
-          email,
-          employeeId,
-          code: error.code,
-          command: error.command,
-          message: error.message,
-        });
-      });
-
     res.status(201).json({
       success: true,
       message: "Team member added successfully",
       member: result.rows[0],
       employeeId,
+    });
+
+    setImmediate(() => {
+      sendWelcomeEmail(name, email, employeeId, autoPassword)
+        .then(() => {
+          console.log("[Email] Welcome email sent", {
+            email,
+            employeeId,
+          });
+        })
+        .catch((error) => {
+          console.error("[Email] Failed to send welcome email", {
+            email,
+            employeeId,
+            code: error.code,
+            command: error.command,
+            message: error.message,
+          });
+        });
     });
 
   } catch (err) {
