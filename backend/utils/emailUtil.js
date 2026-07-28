@@ -1,15 +1,59 @@
 const transporter = require("../config/email");
 
 const getSender = () => {
-  const email = process.env.SMTP_FROM_EMAIL || process.env.EMAIL_USER || process.env.SMTP_USER;
+  const email = process.env.SMTP_FROM_EMAIL;
   const name = process.env.SMTP_FROM_NAME || "Vconstech";
-  return email ? `"${name}" <${email}>` : undefined;
+  if (!email) {
+    throw new Error("[SMTP] SMTP_FROM_EMAIL is required");
+  }
+  return `"${name}" <${email}>`;
+};
+
+const getPublicSmtpConfig = () =>
+  typeof transporter.smtpConfig === "function"
+    ? transporter.smtpConfig()
+    : {
+        host: process.env.SMTP_HOST,
+        port: Number(process.env.SMTP_PORT || 0),
+        secure: String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
+        userExists: Boolean(process.env.SMTP_USER),
+        passwordExists: Boolean(process.env.SMTP_PASS),
+      };
+
+const sendMailWithLogging = async (options) => {
+  const smtp = getPublicSmtpConfig();
+  console.log("[SMTP] sendMail reached", {
+    ...smtp,
+    to: options.to,
+    subject: options.subject,
+  });
+
+  try {
+    const result = await transporter.sendMail(options);
+    console.log("[SMTP] sendMail ok", {
+      ...smtp,
+      to: options.to,
+      subject: options.subject,
+      messageId: result.messageId,
+    });
+    return result;
+  } catch (err) {
+    console.error("[SMTP] sendMail failed", {
+      ...smtp,
+      to: options.to,
+      subject: options.subject,
+      code: err.code,
+      command: err.command,
+      message: err.message,
+    });
+    throw err;
+  }
 };
 
 // ── Send Welcome Email ──────────────────────────────────────────────────────
 const sendWelcomeEmail = async (name, email, employeeId, autoPassword) => {
   try {
-    await transporter.sendMail({
+    await sendMailWithLogging({
       from: getSender(),
       to: email,
       subject: "CRM Login Credentials",
@@ -108,7 +152,7 @@ const sendPasswordResetEmail = async (email, resetToken) => {
   try {
     const resetLink = `http://localhost:5173/reset-password/${resetToken}`;
 
-    await transporter.sendMail({
+    await sendMailWithLogging({
       from: getSender(),
       to: email,
       subject: "Reset Your Password",
@@ -166,7 +210,7 @@ const sendSubscriptionReminderEmail = async ({
 }) => {
   if (!email) return { sent: false, reason: "missing_email" };
 
-  await transporter.sendMail({
+  await sendMailWithLogging({
     from: getSender(),
     to: email,
     subject: subject || "Subscription Renewal Reminder",
@@ -195,7 +239,7 @@ const sendSubscriptionReminderEmail = async ({
 const sendSubscriptionExpiredEmail = async ({ name, email, companyName }) => {
   if (!email) return { sent: false, reason: "missing_email" };
 
-  await transporter.sendMail({
+  await sendMailWithLogging({
     from: getSender(),
     to: email,
     subject: "Your Subscription Has Expired",
@@ -221,7 +265,7 @@ const sendSubscriptionExpiredEmail = async ({ name, email, companyName }) => {
 const sendErpInvitationEmail = async ({ name, email, invitationUrl, invitationId }) => {
   if (!email) return { sent: false, reason: "missing_email" };
 
-  await transporter.sendMail({
+  await sendMailWithLogging({
     from: getSender(),
     to: email,
     subject: "Complete your Vconstech ERP registration",
