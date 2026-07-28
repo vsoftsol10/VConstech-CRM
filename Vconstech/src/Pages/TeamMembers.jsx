@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../config/api";
 
 
 
@@ -11,7 +12,7 @@ import {
 } from "../components/TeamMember";
 import ViewMemberModal from "../components/TeamMember/ViewMemberModal";
 
-const API = "http://localhost:5000";
+const API = `${API_BASE_URL}`;
 
 export default function TeamMembers() {
   const [members,  setMembers]  = useState([]);

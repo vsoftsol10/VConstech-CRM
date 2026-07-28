@@ -1,7 +1,8 @@
+import { API_BASE_URL } from "../../config/api";
 
 import Modal from "./Modal";
 import { useNavigate } from "react-router-dom";
-const API = "http://localhost:5000";
+const API = `${API_BASE_URL}`;
 
 const Row = ({ label, value }) => (
   <div className="flex justify-between items-center py-2.5 border-b border-gray-100 last:border-0">

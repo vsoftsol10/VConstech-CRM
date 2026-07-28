@@ -6,6 +6,7 @@ import SearchBar from "../components/subscription/filters/SearchBar";
 import FilterChips from "../components/subscription/filters/FilterChips";
 import SubscriptionTable from "../components/subscription/table/SubscriptionTable";
 import SubscriptionMobileCards from "../components/subscription/table/SubscriptionMobileCards";
+import { API_BASE_URL } from "../config/api";
 
 import { EMPTY_FILTERS } from "../constants/subscriptionConstants";
 import { parseExpire } from "../utils/subscriptionUtils";
@@ -22,7 +23,7 @@ export default function SubscriptionPage() {
   useEffect(() => {
     const loadCustomers = async () => {
       try {
-        const res = await axios.get("http://localhost:5000/api/customers");
+        const res = await axios.get(`${API_BASE_URL}/api/customers`);
         setSubscriptions(res.data);
       } catch (err) {
         console.log("API error:", err);

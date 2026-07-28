@@ -3,7 +3,8 @@ import logo from "../../assets/logo-3.png";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import Select from "react-select";
-const API = "http://localhost:5000";
+import { API_BASE_URL } from "../../config/api";
+const API = `${API_BASE_URL}`;
 
 const DEPARTMENTS = [
   "Sales",

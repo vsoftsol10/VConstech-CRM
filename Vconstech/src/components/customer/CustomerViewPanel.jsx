@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import { API_BASE_URL } from "../../config/api";
 function safe(val) {
   return val?.toString() || "—";
 }
@@ -43,7 +44,7 @@ export default function CustomerViewPanel({ customer, onClose, onEdit }) {
       try {
         setHistoryLoading(true);
         const res = await axios.get(
-          `http://localhost:5000/api/customers/subscription-history/${customer.id}`
+          `${API_BASE_URL}/api/customers/subscription-history/${customer.id}`
         );
         setSubscriptionHistory(Array.isArray(res.data) ? res.data : []);
       } catch (err) {

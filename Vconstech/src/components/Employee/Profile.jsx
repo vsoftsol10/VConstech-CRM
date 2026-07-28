@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "../../config/api";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-const API = "http://localhost:5000";
+const API = `${API_BASE_URL}`;
 
 function getInitials(name = "") {
   return name.split(" ").slice(0, 2).map((w) => w[0]?.toUpperCase() || "").join("");

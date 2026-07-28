@@ -1,8 +1,9 @@
 import { useState, useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import ActionDropdown from "./ActionDropdown";
+import { API_BASE_URL } from "../../config/api";
 
-const API = "http://localhost:5000";
+const API = `${API_BASE_URL}`;
 
 const STATUS_COLOR = {
   Active:     "bg-green-100 text-green-700",

@@ -13,10 +13,11 @@ import {
   FiTrash2,
   FiX,
 } from "react-icons/fi";
+import { API_BASE_URL } from "../../config/api";
 import AssignTaskForm from "../TeamMember/AssignTaskForm";
 import TicketHistoryDrawer from "../tickets/TicketHistoryDrawer";
 
-const API = "http://localhost:5000";
+const API = `${API_BASE_URL}`;
 const STATUS_OPTIONS = ["Open", "In Progress", "Resolved", "Closed"];
 
 const PRIORITY_COLORS = {

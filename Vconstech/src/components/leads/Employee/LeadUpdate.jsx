@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "../../../config/api";
 
 const stages = [
   "new",
@@ -67,7 +68,7 @@ export default function UpdateTaskForm({ leadId, leadData }) {
     const load = async () => {
       setLoading(true);
       try {
-        const res = await axios.get(`http://localhost:5000/api/leads/work-history/${leadId}`);
+        const res = await axios.get(`${API_BASE_URL}/api/leads/work-history/${leadId}`);
         setHistory(res.data);
       } catch (err) {
         console.error("Failed to load history", err);
@@ -105,7 +106,7 @@ export default function UpdateTaskForm({ leadId, leadData }) {
     try {
       const employee = JSON.parse(localStorage.getItem("employee") || "{}");
 
-      await axios.post("http://localhost:5000/api/leads/work-history", {
+      await axios.post(`${API_BASE_URL}/api/leads/work-history`, {
         leadId,
         stage,
         note,
@@ -116,7 +117,7 @@ export default function UpdateTaskForm({ leadId, leadData }) {
       });
 
       // Refresh history
-      const res = await axios.get(`http://localhost:5000/api/leads/work-history/${leadId}`);
+      const res = await axios.get(`${API_BASE_URL}/api/leads/work-history/${leadId}`);
       setHistory(res.data);
       setNote("");
       alert("Work update saved!");

@@ -10,11 +10,12 @@ import {
   FiTrash2,
   FiX
 } from "react-icons/fi";
+import { API_BASE_URL } from "../../config/api";
 
 import LeadPipelineColumn from "../leads/LeadPipelineColumn";
 import AssignTaskForm from "../TeamMember/AssignTaskForm";
 
-const API = "http://localhost:5000";
+const API = `${API_BASE_URL}`;
 
 const TASK_STATUS_OPTIONS = ["All", "Open", "In Progress", "Resolved", "Closed"];
 const WORK_HISTORY_TABS = ["Active Works", "Done Works"];

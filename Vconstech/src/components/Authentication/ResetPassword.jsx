@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../../config/api";
 // ResetPassword.jsx
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
@@ -31,7 +32,7 @@ export default function ResetPassword() {
     if (password.length < 8)  { setMessage("Password must be at least 8 characters"); setIsError(true); return; }
     setLoading(true);
     try {
-      const res = await axios.post(`http://localhost:5000/api/auth/reset-password/${token}`, { password });
+      const res = await axios.post(`${API_BASE_URL}/api/auth/reset-password/${token}`, { password });
       setMessage(res.data.message);
       setIsError(false);
       setSuccess(true);

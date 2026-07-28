@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { FiX } from "react-icons/fi";
 import axios from "axios";
+import { API_BASE_URL } from "../../config/api";
 
 const statusColors = {
   won:       "bg-green-100 text-green-600",
@@ -51,7 +52,7 @@ export default function LeadDetails({ lead, onClose }) {
     const fetchHistory = async () => {
       setLoadingHistory(true);
       try {
-        const res = await axios.get(`http://localhost:5000/api/leads/work-history/${lead.id}`);
+        const res = await axios.get(`${API_BASE_URL}/api/leads/work-history/${lead.id}`);
         setHistory(res.data);
       } catch (err) {
         console.error("Failed to load work history", err);

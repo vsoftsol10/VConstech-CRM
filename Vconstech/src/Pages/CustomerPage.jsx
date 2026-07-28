@@ -1,6 +1,7 @@
 import "../styles/customerAnimations.css";
 import { useState, useEffect } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "../config/api";
 
 import CustomerHeader from "../components/customer/CustomerHeader";
 import CustomerStats from "../components/customer/CustomerStats";
@@ -64,7 +65,7 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const loadCustomers = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/api/customers");
+      const res = await axios.get(`${API_BASE_URL}/api/customers`);
 
       const normalized = res.data.map((c) => ({
         id:           c.id,
@@ -88,7 +89,7 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
   const handleToggle = async (c) => {
     const nextActive = !c.active;
     try {
-      const res = await axios.patch(`http://localhost:5000/api/customers/${c.id}/status`, {
+      const res = await axios.patch(`${API_BASE_URL}/api/customers/${c.id}/status`, {
         active: nextActive,
       });
       const updated = res.data.customer;
@@ -108,7 +109,7 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
         )
       );
       if (selectedCustomer?.id === c.id) {
-        const detail = await axios.get(`http://localhost:5000/api/customers/${c.id}`);
+        const detail = await axios.get(`${API_BASE_URL}/api/customers/${c.id}`);
         setSelectedCustomer(detail.data);
       }
     } catch (err) {
@@ -124,7 +125,7 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const handleView = async (customer) => {
     try {
-      const res = await axios.get(`http://localhost:5000/api/customers/${customer.id}`);
+      const res = await axios.get(`${API_BASE_URL}/api/customers/${customer.id}`);
       setSelectedCustomer(res.data);
       setViewOpen(true);
     } catch (err) {
@@ -140,7 +141,7 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this customer?")) return;
     try {
-      await axios.delete(`http://localhost:5000/api/customers/${id}`);
+      await axios.delete(`${API_BASE_URL}/api/customers/${id}`);
       setCustomers((prev) => prev.filter((c) => c.id !== id));
       setSelectedCustomers((prev) => prev.filter((customerId) => customerId !== id));
       if (selectedCustomer?.id === id) setViewOpen(false);

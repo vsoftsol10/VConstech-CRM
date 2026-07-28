@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import Select from "react-select";
 import { FiX } from "react-icons/fi";
 import axios from "axios";
+import { API_BASE_URL } from "../../config/api";
 
 const YELLOW = "#F5C518";
 
@@ -140,7 +141,7 @@ export default function CustomerFormPage({
     const loadCustomer = async () => {
       try {
         setLoading(true);
-        const res = await axios.get(`http://localhost:5000/api/customers/${id}`);
+        const res = await axios.get(`${API_BASE_URL}/api/customers/${id}`);
         const data = res.data;
         setForm({
           customer_name: data.customer_name || "",
@@ -191,7 +192,7 @@ export default function CustomerFormPage({
   };
 
   const checkDuplicates = async () => {
-    const { data } = await axios.get("http://localhost:5000/api/customers");
+    const { data } = await axios.get(`${API_BASE_URL}/api/customers`);
     const currentId = String(id || "");
     const email = form.email.trim().toLowerCase();
     const phone = form.phone.trim();
@@ -254,9 +255,9 @@ export default function CustomerFormPage({
       };
 
       if (isNew) {
-        await axios.post("http://localhost:5000/api/customers", payload);
+        await axios.post(`${API_BASE_URL}/api/customers`, payload);
       } else {
-        await axios.put(`http://localhost:5000/api/customers/${id}`, payload);
+        await axios.put(`${API_BASE_URL}/api/customers/${id}`, payload);
       }
       onRefresh?.();
       onCustomerAdded?.();

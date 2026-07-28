@@ -3,6 +3,7 @@ import LeadDetails from "./LeadsViewPage";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "../../config/api";
 const stages = ["New", "Contacted", "Qualified", "Proposal", "Won"];
 
 const pipelineColors = {
@@ -83,7 +84,7 @@ const handleDelete = async () => {
 
   try {
     await axios.delete(
-      `http://localhost:5000/api/leads/${lead.id}`
+      `${API_BASE_URL}/api/leads/${lead.id}`
     );
 
     alert("Lead deleted successfully");
@@ -105,7 +106,7 @@ const handleConvertToCustomer = async () => {
   setConverting(true);
   try {
     await axios.post(
-      `http://localhost:5000/api/leads/${lead.id}/convert-to-customer`
+      `${API_BASE_URL}/api/leads/${lead.id}/convert-to-customer`
     );
 
     setConverted(true);

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "../../config/api";
 
 const STYLE = `
   @keyframes slideUp {
@@ -145,7 +146,7 @@ export default function TeamStats({ members = null }) {
 
   const fetchTeamStats = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/api/team");
+      const res = await axios.get(`${API_BASE_URL}/api/team`);
       applyStats(res.data);
     } catch {
       setStats([]);

@@ -5,6 +5,7 @@ import {
   FiTrash2,
   FiCheck,
 } from "react-icons/fi";
+import { API_BASE_URL } from "../../config/api";
 import { useNavigate } from "react-router-dom";
 import { FiArrowLeft } from "react-icons/fi";
 import EditPlanModal from "./PlanEdit";
@@ -40,7 +41,7 @@ useEffect(() => {
   };
 }, []);
   const fetchPlans = async () => {
-    const res = await fetch("http://localhost:5000/api/plans");
+    const res = await fetch(`${API_BASE_URL}/api/plans`);
     const data = await res.json();
     setPlans(data);
   };
@@ -63,7 +64,7 @@ const closeModal = () => {
 };
   const savePlan = async (updatedPlan) => {
   try {
-    const res = await fetch(`http://localhost:5000/api/plans/${editingPlan.id}`, {
+    const res = await fetch(`${API_BASE_URL}/api/plans/${editingPlan.id}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",

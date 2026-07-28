@@ -17,10 +17,9 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { API_BASE_URL } from "../../config/api";
 
-const ERP_API_URL = (import.meta.env.VITE_ERP_API_URL || "http://localhost:5001/api")
-  .trim()
-  .replace(/\/$/, "");
+const ERP_API_URL = `${API_BASE_URL}/api`;
 
 const INITIAL_FORM = {
   name: "",

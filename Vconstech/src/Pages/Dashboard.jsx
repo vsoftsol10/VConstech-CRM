@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "../config/api";
 
 import StatsCards from "../components/dashboard/StatsCards";
 import PlanUsageSection from "../components/dashboard/PlanUsageSection";
@@ -18,15 +19,15 @@ useEffect(() => {
   const load = async () => {
     try {
       const customersRes = await axios.get(
-        "http://localhost:5000/api/customers"
+        `${API_BASE_URL}/api/customers`
       );
 
       const statsRes = await axios.get(
-        `http://localhost:5000/api/customers/stats/monthly?year=${selectedYear}`
+        `${API_BASE_URL}/api/customers/stats/monthly?year=${selectedYear}`
       );
 
       const dashboardStatsRes = await axios.get(
-        "http://localhost:5000/api/dashboard/stats"
+        `${API_BASE_URL}/api/dashboard/stats`
       );
 
       setCustomers(customersRes.data);

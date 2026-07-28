@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../../config/api";
 // ForgotPassword.jsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -16,7 +17,7 @@ export default function ForgotPassword() {
     if (!email.trim()) return;
     setLoading(true);
     try {
-      const res = await axios.post("http://localhost:5000/api/auth/forgot-password", { email });
+      const res = await axios.post(`${API_BASE_URL}/api/auth/forgot-password`, { email });
       setMessage(res.data.message);
       setIsError(false);
       setSent(true);

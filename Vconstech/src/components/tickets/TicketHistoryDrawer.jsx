@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FiX, FiClock, FiPlus, FiChevronDown } from "react-icons/fi";
+import { API_BASE_URL } from "../../config/api";
 
-const API = "http://localhost:5000";
+const API = `${API_BASE_URL}`;
 const ACTIVITY_TYPES = ["Work Note", "Follow Up", "Status Update", "Customer Reply"];
 const STATUS_OPTIONS = ["Open", "In Progress", "Resolved", "Closed"];
 

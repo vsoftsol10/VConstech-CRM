@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Select from "react-select";
 import { FiX, FiClipboard } from "react-icons/fi";
 import axios from "axios";
+import { API_BASE_URL } from "../../config/api";
 // import UpdateTaskForm from "./Employee/LeadUpdate";
 import UpdateTaskForm from "./Employee/LeadUpdate"
 const YELLOW = "#F5C518";
@@ -113,7 +114,7 @@ export default function AddLeadModal({ onClose, onSubmit, editData = null }) {
   useEffect(() => {
     const loadMembers = async () => {
       try {
-        const res = await axios.get("http://localhost:5000/api/team");
+        const res = await axios.get(`${API_BASE_URL}/api/team`);
         const options = res.data
           .filter(m => m.department?.toLowerCase() === "sales")
           .map(m => ({ value: m.id, label: m.name }));
@@ -202,7 +203,7 @@ export default function AddLeadModal({ onClose, onSubmit, editData = null }) {
   const checkDuplicates = async () => {
     const normalizedEmail = form.email.trim().toLowerCase();
     const normalizedPhone = form.phone.trim();
-    const { data } = await axios.get("http://localhost:5000/api/leads");
+    const { data } = await axios.get(`${API_BASE_URL}/api/leads`);
     const currentId = String(editData?.id || "");
     const duplicate = data.find((lead) => {
       if (String(lead.id) === currentId) return false;
@@ -244,10 +245,10 @@ setFormError("");
 
       if (editData) {
         // FIX: serialize selects for PUT just like POST
-        await axios.put(`http://localhost:5000/api/leads/${editData.id}`, serializeForm());
+        await axios.put(`${API_BASE_URL}/api/leads/${editData.id}`, serializeForm());
         alert("Lead updated successfully");
       } else {
-        await axios.post("http://localhost:5000/api/leads", serializeForm());
+        await axios.post(`${API_BASE_URL}/api/leads`, serializeForm());
         alert("Lead created successfully");
       }
       onSubmit?.(serializeForm());

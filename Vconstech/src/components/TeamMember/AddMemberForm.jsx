@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { API_BASE_URL } from "../../config/api";
 
 import {
   FiX,
@@ -18,7 +19,7 @@ import {
 } from "../../utils/memberValidation";
 import { selectStyles } from "../../components/TeamMember/styles/selectStyles";
 
-const API = "http://localhost:5000";
+const API = `${API_BASE_URL}`;
 
 const DEPARTMENTS = ["Sales", "Marketing", "Technical", "Support"].map((v) => ({
   value: v,
@@ -191,11 +192,11 @@ export default function AddMemberModal({
 
       const response = initialData
         ? await axios.put(
-            `http://localhost:5000/api/team/${initialData.id}`,
+            `${API_BASE_URL}/api/team/${initialData.id}`,
             formData,
             { headers: { "Content-Type": "multipart/form-data" } }
           )
-        : await axios.post("http://localhost:5000/api/team", formData, {
+        : await axios.post(`${API_BASE_URL}/api/team`, formData, {
             headers: { "Content-Type": "multipart/form-data" },
           });
 

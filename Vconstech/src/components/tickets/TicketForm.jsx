@@ -15,8 +15,9 @@ import {
   FiTrash2,
   FiUser,
 } from "react-icons/fi";
+import { API_BASE_URL } from "../../config/api";
 
-const API = "http://localhost:5000";
+const API = `${API_BASE_URL}`;
 const STATUS_OPTIONS = ["Open", "In Progress", "Resolved", "Closed", "Draft"];
 const URGENCY_OPTIONS = ["Low", "Medium", "High", "Critical"];
 const CONTACT_OPTIONS = ["Email", "Phone", "Walk-in", "Chat"];

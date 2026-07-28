@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../config/api";
 
 
 import LeadStatsSection from "../components/leads/LeadStatsSection";
@@ -63,7 +64,7 @@ const LeadSales = () => {
   const fetchLeads = async () => {
   try {
     const res = await axios.get(
-      "http://localhost:5000/api/leads"
+      `${API_BASE_URL}/api/leads`
     );
 
     setLeads(uniqueLeadsById(res.data || []));

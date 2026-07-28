@@ -2,6 +2,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import axios from "axios";
 import AddLeadModal from "../leads/AddleadForm";
+import { API_BASE_URL } from "../../config/api";
 
 export default function EditLeadPage() {
   const { id } = useParams();
@@ -16,7 +17,7 @@ export default function EditLeadPage() {
         setLoading(true);
 
         const res = await axios.get(
-          `http://localhost:5000/api/leads/${id}`
+          `${API_BASE_URL}/api/leads/${id}`
         );
 
         setLead(res.data);

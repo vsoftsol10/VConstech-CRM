@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../../config/api";
 
 import { useEffect, useState } from "react";
 import axios from "axios";
@@ -67,7 +68,7 @@ const LeadStatsSection = ({ refreshKey }) => {
   const fetchLeadStats = async () => {
     try {
       const { data } = await axios.get(
-        "http://localhost:5000/api/leads"
+        `${API_BASE_URL}/api/leads`
       );
 
       setStats({

@@ -4,8 +4,9 @@ import axios from "axios";
 import { AnimatePresence, motion } from "framer-motion";
 import { FiEdit2, FiSave, FiSearch, FiX } from "react-icons/fi";
 import ActionDropdown from "../../TeamMember/ActionDropdown";
+import { API_BASE_URL } from "../../../config/api";
 
-const API = "http://localhost:5000";
+const API = `${API_BASE_URL}`;
 
 const DEPARTMENT_OPTIONS = ["Sales", "Support", "Technical", "Marketing"];
 const STATUS_OPTIONS = ["Open", "In Progress", "Completed", "On Hold", "Done", "Closed"];

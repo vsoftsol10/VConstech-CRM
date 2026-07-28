@@ -179,11 +179,11 @@ const markCrmInactive = async (customer) => {
 };
 
 const deactivateErpAccount = async (customer, eventId) => {
-  if (!customer.erp_customer_id && !customer.id) {
-    return { skipped: true, reason: "missing_customer_identifier" };
+  if (!customer.erp_customer_id) {
+    return { skipped: true, reason: "missing_erp_customer_identifier" };
   }
 
-  return erpApiClient.updateCustomerStatus(customer.id, {
+  return erpApiClient.updateCustomerStatus(customer.erp_customer_id, {
     status: "SUBSCRIPTION_EXPIRED",
     accountStatus: "SUBSCRIPTION_EXPIRED",
     isActive: false,

@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiSearch, FiBell, FiPlus, FiMenu, FiChevronDown, FiUser, FiLogOut } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
-const API = "http://localhost:5000";
+import { API_BASE_URL } from "../../config/api";
+const API = `${API_BASE_URL}`;
 const pages = [
   { label: "Dashboard",    path: "/Dashboard",    keywords: ["dashboard", "home", "analytics", "stats", "charts"] },
   { label: "Lead & Sales", path: "/lead-sales",   keywords: ["lead", "sales", "pipeline", "qualified", "contacted", "proposal", "won", "lost"] },

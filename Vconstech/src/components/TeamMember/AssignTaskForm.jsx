@@ -3,6 +3,7 @@ import axios from "axios";
 import { motion } from "framer-motion";
 import { FiX } from "react-icons/fi";
 import Select from "react-select";
+import { API_BASE_URL } from "../../config/api";
 
 const PRIORITIES = ["High", "Medium", "Low"].map((v) => ({ value: v, label: v }));
 const STATUSES = ["Open", "In Progress", "Completed", "Done", "Closed"].map((v) => ({ value: v, label: v }));
@@ -135,7 +136,7 @@ export default function AssignTaskModal({
     setWorkNotesLoading(true);
     setWorkNoteError("");
     try {
-      const response = await axios.get(`http://localhost:5000/api/tasks/${editTask.id}/updates`, {
+      const response = await axios.get(`${API_BASE_URL}/api/tasks/${editTask.id}/updates`, {
         params: { employee_id: employeeId },
       });
       setWorkNotes(response.data?.data || response.data || []);
@@ -158,7 +159,7 @@ export default function AssignTaskModal({
 
   const fetchTeamMembers = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/api/team");
+      const res = await axios.get(`${API_BASE_URL}/api/team`);
       const teamMembers = res.data;
       const uniqueDepartments = [...new Set(teamMembers.map((member) => member.department))];
       const deptOptions = uniqueDepartments.map((dept) => ({ value: dept, label: dept }));
@@ -207,7 +208,7 @@ export default function AssignTaskModal({
     setSubmitError("");
 
     try {
-      const res = await axios.get("http://localhost:5000/api/team");
+      const res = await axios.get(`${API_BASE_URL}/api/team`);
       const filtered = res.data
         .filter((emp) => emp.department === dept.value)
         .map((emp) => ({ value: emp.employee_id, label: emp.name, employee_name: emp.name }));
@@ -277,10 +278,10 @@ export default function AssignTaskModal({
       };
 
       if (editTask) {
-        const response = await axios.put(`http://localhost:5000/api/tasks/${editTask.id}`, payload);
+        const response = await axios.put(`${API_BASE_URL}/api/tasks/${editTask.id}`, payload);
         onAssign?.(response.data?.task || response.data?.data || response.data);
       } else {
-        const response = await axios.post("http://localhost:5000/api/tasks", payload);
+        const response = await axios.post(`${API_BASE_URL}/api/tasks`, payload);
         onAssign?.(response.data?.task || response.data?.data || response.data);
       }
 
@@ -310,7 +311,7 @@ export default function AssignTaskModal({
     setWorkNoteSaving(true);
     setWorkNoteError("");
     try {
-      const response = await axios.post(`http://localhost:5000/api/tasks/${editTask.id}/updates`, {
+      const response = await axios.post(`${API_BASE_URL}/api/tasks/${editTask.id}/updates`, {
         employee_id: employeeId,
         employee_name: employeeName,
         work_note: note,
