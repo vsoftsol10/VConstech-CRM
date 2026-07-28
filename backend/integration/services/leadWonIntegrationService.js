@@ -149,6 +149,25 @@ const failMapping = async (mappingId, error) => {
   );
 };
 
+const sendInvitationEmailSafely = async ({ name, email, invitationId, invitationUrl }) => {
+  try {
+    return await sendErpInvitationEmail({
+      name,
+      email,
+      invitationId,
+      invitationUrl,
+    });
+  } catch (error) {
+    console.error("ERP Invitation Email Error:", error);
+    return {
+      sent: false,
+      error: error.message,
+      code: error.code,
+      command: error.command,
+    };
+  }
+};
+
 const hasCompletedIntegration = (mapping) =>
   mapping &&
   ["INVITED", "REGISTERED", "CREATED", "ACTIVE", "SUCCESS"].includes(
@@ -229,7 +248,7 @@ const triggerLeadWonInvitation = async ({ lead, customer }) => {
     const invitationId = erpInvitation.invitationId;
     const erpCustomerId = erpInvitation.erpCustomerId || null;
     const invitationUrl = buildInvitationUrl(invitationId);
-    const emailStatus = await sendErpInvitationEmail({
+    const emailStatus = await sendInvitationEmailSafely({
       name: customer.customer_name || lead.full_name,
       email: customer.email || lead.email,
       invitationId,
@@ -268,6 +287,8 @@ const triggerLeadWonInvitation = async ({ lead, customer }) => {
         invitation: {
           invitationId,
           status: "INVITED",
+          url: invitationUrl,
+          email: emailStatus,
         },
       };
     } catch (error) {

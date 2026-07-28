@@ -12,6 +12,8 @@ const formatIntegrationResult = (result) => ({
   skipped: result.skipped,
   reason: result.reason,
   invitationId: result.invitation?.invitationId || result.mapping?.invitation_id,
+  invitationUrl: result.invitation?.url || null,
+  email: result.invitation?.email || result.mapping?.response_payload?.email || null,
   erpCustomerId: result.mapping?.erp_customer_id || null,
   status: result.invitation?.status || result.mapping?.status,
 });
@@ -137,7 +139,7 @@ const convertLeadToCustomer = async (req, res) => {
         success: true,
         message: alreadyConverted
           ? "Lead was already converted. ERP invitation status returned."
-          : "Lead converted to customer and invitation email sent.",
+          : "Lead converted to customer and ERP invitation created.",
         customerId: customer.id,
         alreadyConverted,
         integration: {
