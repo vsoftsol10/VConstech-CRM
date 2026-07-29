@@ -17,9 +17,9 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { API_BASE_URL } from "../../config/api";
+import { ERP_API_BASE_URL } from "../../config/api";
 
-const ERP_API_URL = `${API_BASE_URL}/api`;
+const ERP_API_URL = ERP_API_BASE_URL;
 
 const INITIAL_FORM = {
   name: "",
