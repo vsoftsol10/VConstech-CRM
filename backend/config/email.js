@@ -332,7 +332,9 @@ const verify = async (callback) => {
   }
 };
 
-verify();
+verify().catch((err) => {
+  console.error("[Brevo] startup verify failed, continuing without crashing:", err.message);
+});
 
 const transporter = {
   sendMail,
