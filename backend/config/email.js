@@ -152,7 +152,7 @@ const getRequiredEnv = (name) => {
   return value;
 };
 
-const BREVO_API_KEY = getRequiredEnv("SMTP_PASS");
+const BREVO_API_KEY = getRequiredEnv("BREVO_API_KEY");
 const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
 
 const defaultFromEmail = getRequiredEnv("SMTP_FROM_EMAIL");
