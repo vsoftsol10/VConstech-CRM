@@ -47,6 +47,7 @@ const convertLeadToCustomer = async (req, res) => {
       "SELECT * FROM leads WHERE id = $1 FOR UPDATE",
       [leadId]
     );
+    
 
     lead = result.rows[0];
     if (!lead) {

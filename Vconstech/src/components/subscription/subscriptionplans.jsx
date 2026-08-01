@@ -12,6 +12,7 @@ import EditPlanModal from "./PlanEdit";
 export function SubscriptionPlans() {
   const navigate = useNavigate();
 
+  
   const [plans, setPlans] = useState([]);
 const [openMenu, setOpenMenu] = useState(null);
 const menuRef = useRef(null);
@@ -62,23 +63,26 @@ const closeModal = () => {
 
   alert("Plan delete is not available because the backend does not define DELETE /api/plans/:id.");
 };
-  const savePlan = async (updatedPlan) => {
+ const savePlan = async (updatedPlan) => {
   try {
+    const payload = {
+      ...updatedPlan,
+      price: updatedPlan.price === "" ? null : Number(updatedPlan.price),
+    };
+
     const res = await fetch(`${API_BASE_URL}/api/plans/${editingPlan.id}`, {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(updatedPlan),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
     });
 
     const data = await res.json();
 
     if (data.success) {
-      fetchPlans(); // refresh UI
+      fetchPlans();
       setEditingPlan(null);
     } else {
-      alert("Update failed");
+      alert("Update failed: " + data.message);
     }
   } catch (err) {
     console.log(err);
