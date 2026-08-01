@@ -111,7 +111,7 @@ const handleConvertToCustomer = async () => {
 
     setConverted(true);
     onConverted?.(lead.id);
-    alert("Lead converted successfully");
+    alert("Lead converted successfully.Check Customer Page");
     if (!onConverted) window.location.reload();
   } catch (err) {
     const message =

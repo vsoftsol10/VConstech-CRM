@@ -120,7 +120,7 @@ const InvitationRegistration = () => {
           <MessagePanel
             type="success"
             title="Registration complete"
-            message="Your ERP account has been created and your free trial has started."
+            message="Your ERP account has been created and your Plan has started.Please check your email for your login credentials."
           />
         )}
 
