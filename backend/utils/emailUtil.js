@@ -104,7 +104,7 @@ const sendWelcomeEmail = async (name, email, employeeId, autoPassword) => {
 
 <p>
   <a
-    href="http://localhost:5673/login"
+    href="https://crm.thevsoft.com/"
     style="
       background:#2563eb;
       color:#ffffff;
@@ -121,7 +121,7 @@ const sendWelcomeEmail = async (name, email, employeeId, autoPassword) => {
 
 <p>
   If the button doesn't work, copy and paste this URL into your browser:<br>
-  <strong>http://localhost:5173/</strong>
+  <strong>https://crm.thevsoft.com</strong>
 </p>
               </div>
 
