@@ -73,7 +73,10 @@ const createPendingMapping = async (client, { lead, customer, payload }) => {
      (lead_id, customer_id, status, request_payload)
      VALUES ($1, $2, $3, $4)
      ON CONFLICT (lead_id) DO UPDATE
-     SET updated_at = NOW()
+     SET customer_id = EXCLUDED.customer_id,
+         status = EXCLUDED.status,
+         request_payload = EXCLUDED.request_payload,
+         updated_at = NOW()
      RETURNING *`,
     [lead.id, customer.id, "PENDING", payload]
   );
@@ -81,15 +84,16 @@ const createPendingMapping = async (client, { lead, customer, payload }) => {
   return result.rows[0];
 };
 
-const markMappingPending = async (client, { mappingId, payload }) => {
+const markMappingPending = async (client, { mappingId, customerId, payload }) => {
   const result = await client.query(
     `UPDATE crm_erp_customer_mappings
      SET status = $1,
-         request_payload = $2,
+         customer_id = $2,
+         request_payload = $3,
          updated_at = NOW()
-     WHERE id = $3
+     WHERE id = $4
      RETURNING *`,
-    ["PENDING", payload, mappingId]
+    ["PENDING", customerId, payload, mappingId]
   );
 
   return result.rows[0];
@@ -221,6 +225,7 @@ const triggerLeadWonInvitation = async ({ lead, customer }) => {
     mapping = existingMapping
       ? await markMappingPending(client, {
           mappingId: existingMapping.id,
+          customerId: customer.id,
           payload,
         })
       : await createPendingMapping(client, { lead, customer, payload });
