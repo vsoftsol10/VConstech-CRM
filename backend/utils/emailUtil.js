@@ -150,7 +150,7 @@ const sendWelcomeEmail = async (name, email, employeeId, autoPassword) => {
 // ── Send Password Reset Email ───────────────────────────────────────────────
 const sendPasswordResetEmail = async (email, resetToken) => {
   try {
-    const resetLink = `http://localhost:5173/reset-password/${resetToken}`;
+    const resetLink = `https://crm.thevsoft.com/reset-password/${resetToken}`;
 
     await sendMailWithLogging({
       from: getSender(),

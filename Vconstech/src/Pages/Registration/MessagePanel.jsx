@@ -44,3 +44,4 @@ const MessagePanel = ({ type = "error", title, message }) => {
 };
 
 export default MessagePanel;
+

@@ -78,6 +78,7 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
         start_date:   c.start_date    || "",
         renewal_date: c.renewal_date  || "",   // ← carry through for active check
         active:       Boolean(c.active),
+        members:      c.members ?? "",
       }));
 
       setCustomers(normalized);

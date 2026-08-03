@@ -15,7 +15,7 @@ const integrationConfig = {
     retryDelayMs: Number(process.env.ERP_API_RETRY_DELAY_MS || 500),
     endpoints: {
       invitations: process.env.ERP_INVITATION_PATH || "/api/invitations",
-      customers: process.env.ERP_CUSTOMER_PATH || "/api/invitations",
+      customers: process.env.ERP_CUSTOMER_PATH || "/api/customers",
       customerStatus:
         process.env.ERP_CUSTOMER_STATUS_PATH ||
         "/api/subscription-sync/customers/:customerId/status",

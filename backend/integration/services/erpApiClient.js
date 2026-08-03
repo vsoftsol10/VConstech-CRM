@@ -96,6 +96,21 @@ const request = async (config) => {
 };
 
 const erpApiClient = {
+  getCustomers: (params) =>
+    request({
+      method: "get",
+      url: integrationConfig.erp.endpoints.customers,
+      params,
+    }),
+
+  getCustomer: (customerId) =>
+    request({
+      method: "get",
+      url: `${integrationConfig.erp.endpoints.customers}/${encodeURIComponent(
+        String(customerId)
+      )}`,
+    }),
+
   sendInvitation: (payload) =>
     request({
       method: "post",
@@ -108,6 +123,23 @@ const erpApiClient = {
       method: "post",
       url: integrationConfig.erp.endpoints.customers,
       data: payload,
+    }),
+
+  updateCustomer: (customerId, payload) =>
+    request({
+      method: "put",
+      url: `${integrationConfig.erp.endpoints.customers}/${encodeURIComponent(
+        String(customerId)
+      )}`,
+      data: payload,
+    }),
+
+  deleteCustomer: (customerId) =>
+    request({
+      method: "delete",
+      url: `${integrationConfig.erp.endpoints.customers}/${encodeURIComponent(
+        String(customerId)
+      )}`,
     }),
 
   getCustomerStatus: (customerId) =>

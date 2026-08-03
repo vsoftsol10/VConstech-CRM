@@ -169,6 +169,9 @@ const convertLeadToCustomer = async (req, res) => {
 const getSubscriptionHistory = async (req, res) => {
   try {
     const { customerId } = req.params;
+    if (String(customerId || "").startsWith("ERP-CUST-")) {
+      return res.json([]);
+    }
 
     const result = await pool.query(
       `SELECT *
