@@ -31,6 +31,7 @@ export default function CustomerTable({
 
   const [contentWidth, setContentWidth] = useState(0);
   const isSyncing = useRef(false);
+  const tableScrollRef = useRef(null);
   
   const [barRect, setBarRect] = useState({ left: 0, width: 0, visible: false });
 
@@ -87,6 +88,7 @@ const handleRowsPerPageChange = (e) => {
     
 
       <div
+        ref={tableScrollRef}
         className="hide-native-scrollbar overflow-x-auto overflow-y-hidden"
        
        

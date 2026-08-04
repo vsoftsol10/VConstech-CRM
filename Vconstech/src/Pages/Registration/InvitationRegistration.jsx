@@ -137,3 +137,4 @@ const InvitationRegistration = () => {
 };
 
 export default InvitationRegistration;
+

@@ -6,7 +6,7 @@ import SearchBar from "../components/subscription/filters/SearchBar";
 import FilterChips from "../components/subscription/filters/FilterChips";
 import SubscriptionTable from "../components/subscription/table/SubscriptionTable";
 import SubscriptionMobileCards from "../components/subscription/table/SubscriptionMobileCards";
-import { API_BASE_URL } from "../config/api";
+import { API_BASE_URL, unwrapCustomerList } from "../config/api";
 
 import { EMPTY_FILTERS } from "../constants/subscriptionConstants";
 import { parseExpire } from "../utils/subscriptionUtils";
@@ -24,7 +24,7 @@ export default function SubscriptionPage() {
     const loadCustomers = async () => {
       try {
         const res = await axios.get(`${API_BASE_URL}/api/customers`);
-        setSubscriptions(res.data);
+        setSubscriptions(unwrapCustomerList(res.data));
       } catch (err) {
         console.log("API error:", err);
       }

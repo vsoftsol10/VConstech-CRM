@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import LeadPipelineColumn from "./LeadPipelineColumn";
 
-const LeadPipelineSection = ({ leadsData }) => {
+const LeadPipelineSection = ({ leadsData, activeStage, onRefresh }) => {
   const hasLeads = leadsData.some(
     (stage) => stage.leads.length > 0
   );
@@ -52,6 +52,8 @@ const sortedLeads = leadsData
         <LeadPipelineColumn
           lead={lead}
           stage={lead.status}
+          activeStage={activeStage}
+          onRefresh={onRefresh}
         />
       </motion.div>
     ))}

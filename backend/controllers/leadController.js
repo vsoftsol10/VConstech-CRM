@@ -315,8 +315,17 @@ const getAllLeads = async (req, res) => {
     const query = `
       SELECT
         l.*,
-        EXISTS (SELECT 1 FROM customers c WHERE c.lead_id = l.id) AS is_customer
+        customer_lookup.id AS customer_id,
+        customer_lookup.erp_customer_id,
+        customer_lookup.id IS NOT NULL AS is_customer
       FROM leads l
+      LEFT JOIN LATERAL (
+        SELECT c.id, c.erp_customer_id
+        FROM customers c
+        WHERE c.lead_id = l.id
+        ORDER BY c.id DESC
+        LIMIT 1
+      ) customer_lookup ON true
       ${whereClause}
       ORDER BY l.created_at DESC
     `;
@@ -337,8 +346,17 @@ const getLeadById = async (req, res) => {
     const result = await pool.query(
       `SELECT
         l.*,
-        EXISTS (SELECT 1 FROM customers c WHERE c.lead_id = l.id) AS is_customer
+        customer_lookup.id AS customer_id,
+        customer_lookup.erp_customer_id,
+        customer_lookup.id IS NOT NULL AS is_customer
        FROM leads l
+       LEFT JOIN LATERAL (
+         SELECT c.id, c.erp_customer_id
+         FROM customers c
+         WHERE c.lead_id = l.id
+         ORDER BY c.id DESC
+         LIMIT 1
+       ) customer_lookup ON true
        WHERE l.id = $1`,
       [id]
     );

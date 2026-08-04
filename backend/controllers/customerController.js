@@ -15,12 +15,13 @@ const {
   validateCustomerPayload,
 } = require("../services/customerService");
 const erpApiClient = require("../integration/services/erpApiClient");
+const erpSupabaseCustomerService = require("../services/erpSupabaseCustomerService");
 
 const sendValidationError = (res, errors) =>
   res.status(400).json({ success: false, message: "Please fix the highlighted fields.", errors });
 
 const formattedCustomerSelect = `
-  id, customer_name, company_name, phone, email,
+  id, lead_id, erp_customer_id, customer_name, company_name, phone, email,
   renewal_date >= CURRENT_DATE AS active,
   subscription_plan, subscription_amount,
   subscription_start_date, subscription_end_date,
@@ -45,14 +46,126 @@ const toErpPayload = (body) => ({
   phone: body.phone,
   email: body.email,
   address: body.address,
+  location: body.location,
   subscription_plan: body.subscription_plan,
   notes: body.notes,
 });
 
+const isErpCustomerId = (id) => String(id || "").startsWith("ERP-CUST-");
+const isNumericCrmId = (id) => /^\d+$/.test(String(id || "").trim());
+
+const getLocalCustomerById = async (id) => {
+  if (!isNumericCrmId(id)) return null;
+  const result = await pool.query(
+    `SELECT ${formattedCustomerSelect}
+     FROM customers
+     WHERE id = $1`,
+    [id]
+  );
+  return result.rows[0] || null;
+};
+
+const updateLocalCustomer = async (id, body) => {
+  const existing = await getLocalCustomerById(id);
+  if (!existing) return null;
+
+  const { values, errors } = validateCustomerPayload(body);
+  if (Object.keys(errors).length > 0) {
+    const error = new Error("Please fix the highlighted fields.");
+    error.status = 400;
+    error.errors = errors;
+    throw error;
+  }
+
+  const duplicate = await findCustomerDuplicate(pool, {
+    email: values.email,
+    phone: values.phone,
+    excludeId: id,
+  });
+  if (duplicate) {
+    const error = new Error("Customer already exists.");
+    error.status = 409;
+    error.errors = {
+      ...(normalizeEmail(duplicate.email) === values.email
+        ? { email: "This email address already exists." }
+        : {}),
+      ...(normalizePhone(duplicate.phone) === values.phone
+        ? { phone: "This phone number already exists." }
+        : {}),
+    };
+    throw error;
+  }
+
+  await pool.query(
+    `UPDATE customers
+     SET customer_name = $1,
+         company_name = $2,
+         phone = $3,
+         email = $4,
+         subscription_plan = $5,
+         notes = $6
+     WHERE id = $7`,
+    [
+      values.customer_name,
+      values.company_name,
+      values.phone,
+      values.email,
+      values.subscription_plan,
+      values.notes || null,
+      id,
+    ]
+  );
+
+  return getLocalCustomerById(id);
+};
+
+const deleteLocalCustomer = async (id) => {
+  if (!isNumericCrmId(id)) return null;
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const current = await client.query(
+      "SELECT id, lead_id FROM customers WHERE id = $1 FOR UPDATE",
+      [id]
+    );
+    const customer = current.rows[0];
+    if (!customer) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+
+    await client.query("DELETE FROM subscription_history WHERE customer_id = $1", [id]);
+    await client.query("DELETE FROM crm_erp_customer_mappings WHERE customer_id = $1", [id]);
+    await client.query("DELETE FROM crm_erp_status_events WHERE crm_customer_id = $1", [id]);
+    await client.query("DELETE FROM customers WHERE id = $1", [id]);
+
+    if (customer.lead_id) {
+      await client.query("UPDATE leads SET is_customer = false WHERE id = $1", [customer.lead_id]);
+    }
+
+    await client.query("COMMIT");
+    return { success: true };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
 const createCustomer = async (req, res) => {
   try {
+    const erpSupabaseCustomer = erpSupabaseCustomerService.isConfigured()
+      ? await erpSupabaseCustomerService.createCustomer(toErpPayload(req.body))
+      : null;
+    if (erpSupabaseCustomer) {
+      return res.status(201).json({ success: true, customer: erpSupabaseCustomer });
+    }
+
     const data = await erpApiClient.createCustomer(toErpPayload(req.body));
-    res.status(201).json({ success: true, customer: unwrapErpCustomer(data) });
+    return res.status(201).json({ success: true, customer: unwrapErpCustomer(data) });
   } catch (err) {
     console.error(err.message);
     res.status(err.statusCode || err.status || 502).json({
@@ -65,8 +178,15 @@ const createCustomer = async (req, res) => {
 
 const getAllCustomers = async (req, res) => {
   try {
+    const erpSupabaseData = erpSupabaseCustomerService.isConfigured()
+      ? await erpSupabaseCustomerService.getCustomers(req.query)
+      : null;
+    if (erpSupabaseData) {
+      return res.json(erpSupabaseData.customers);
+    }
+
     const data = await erpApiClient.getCustomers(req.query);
-    res.json(unwrapErpCustomers(data));
+    return res.json(unwrapErpCustomers(data));
   } catch (err) {
     res.status(err.statusCode || 502).json({
       success: false,
@@ -76,10 +196,40 @@ const getAllCustomers = async (req, res) => {
   }
 };
 
+const getConvertedLeadCustomers = async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT ${formattedCustomerSelect}
+       FROM customers
+       WHERE lead_id IS NOT NULL
+       ORDER BY id DESC`
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
 const getCustomerById = async (req, res) => {
   try {
+    const localCustomer = await getLocalCustomerById(req.params.id);
+    if (localCustomer) {
+      return res.json(localCustomer);
+    }
+
+    const erpSupabaseCustomer = erpSupabaseCustomerService.isConfigured()
+      ? await erpSupabaseCustomerService.getCustomer(req.params.id)
+      : null;
+    if (erpSupabaseCustomer) {
+      return res.json(erpSupabaseCustomer);
+    }
+
     const data = await erpApiClient.getCustomer(req.params.id);
-    res.json(unwrapErpCustomer(data));
+    return res.json(unwrapErpCustomer(data));
   } catch (err) {
     res.status(err.statusCode || 502).json({
       success: false,
@@ -91,9 +241,22 @@ const getCustomerById = async (req, res) => {
 
 const updateCustomer = async (req, res) => {
   try {
+    const localCustomer = await updateLocalCustomer(req.params.id, req.body);
+    if (localCustomer) {
+      return res.json({ success: true, customer: localCustomer });
+    }
+
+    const erpSupabaseCustomer = erpSupabaseCustomerService.isConfigured()
+      ? await erpSupabaseCustomerService.updateCustomer(req.params.id, toErpPayload(req.body))
+      : null;
+    if (erpSupabaseCustomer) {
+      return res.json({ success: true, customer: erpSupabaseCustomer });
+    }
+
     const data = await erpApiClient.updateCustomer(req.params.id, toErpPayload(req.body));
-    res.json({ success: true, customer: unwrapErpCustomer(data) });
+    return res.json({ success: true, customer: unwrapErpCustomer(data) });
   } catch (err) {
+    if (err.errors) return sendValidationError(res, err.errors);
     res.status(err.statusCode || err.status || 502).json({
       success: false,
       message: err.message,
@@ -107,6 +270,17 @@ const updateCustomerStatus = async (req, res) => {
     const { id } = req.params;
     const { active } = req.body;
     const nextStatus = active ? "Subscription Active" : "Subscription Expired";
+
+    const erpSupabaseCustomer = erpSupabaseCustomerService.isConfigured()
+      ? await erpSupabaseCustomerService.updateCustomerStatus(id, {
+          status: nextStatus,
+          accountStatus: active ? "ACTIVE" : "INACTIVE",
+          isActive: Boolean(active),
+        })
+      : null;
+    if (erpSupabaseCustomer) {
+      return res.json({ success: true, customer: erpSupabaseCustomer });
+    }
 
     await erpApiClient.updateCustomerStatus(id, {
       status: nextStatus,
@@ -128,8 +302,20 @@ const updateCustomerStatus = async (req, res) => {
 const deleteCustomer = async (req, res) => {
   try {
     const { id } = req.params;
+    const localResult = await deleteLocalCustomer(id);
+    if (localResult) {
+      return res.json(localResult);
+    }
+
+    const erpSupabaseResult = erpSupabaseCustomerService.isConfigured()
+      ? await erpSupabaseCustomerService.deleteCustomer(id)
+      : null;
+    if (erpSupabaseResult) {
+      return res.json({ success: true });
+    }
+
     await erpApiClient.deleteCustomer(id);
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (err) {
     res.status(err.statusCode || 502).json({
       success: false,
@@ -195,6 +381,42 @@ const sendReminder = async (req, res) => {
     const today = new Date().toISOString().split("T")[0];
     const { subject, message, channel = "both" } = req.body || {};
 
+    if (isErpCustomerId(id)) {
+      const customer = unwrapErpCustomer(await erpApiClient.getCustomer(id));
+      if (!customer?.id) {
+        return res.status(404).json({ success: false, message: "ERP customer not found" });
+      }
+
+      const emailStatus =
+        channel === "message"
+          ? { sent: false, skipped: true }
+          : await sendSubscriptionReminderEmail({
+              name: customer.customer_name || customer.name,
+              email: customer.email,
+              subject,
+              message,
+            });
+
+      const messageStatus =
+        channel === "email"
+          ? { sent: false, skipped: true }
+          : { sent: true, channel: "message", phone: customer.phone || null };
+
+      return res.json({
+        success: true,
+        message: "Reminder sent successfully",
+        customer: {
+          ...customer,
+          reminder_sent: true,
+          reminder_sent_date: today,
+        },
+        delivery: {
+          email: emailStatus,
+          message: messageStatus,
+        },
+      });
+    }
+
     const current = await pool.query("SELECT * FROM customers WHERE id = $1", [id]);
     if (current.rows.length === 0) {
       return res.status(404).json({ success: false, message: "Customer not found" });
@@ -248,6 +470,7 @@ const sendReminder = async (req, res) => {
 module.exports = {
   createCustomer,
   getAllCustomers,
+  getConvertedLeadCustomers,
   getCustomerById,
   updateCustomer,
   updateCustomerStatus,

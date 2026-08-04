@@ -1,5 +1,6 @@
 import { FiMail, FiPhone, FiMoreVertical } from "react-icons/fi";
 import LeadDetails from "./LeadsViewPage";
+import CustomerFormPage from "../customer/Customerform";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
@@ -24,12 +25,13 @@ const planBadgeStyles = {
 const formatText = (text) =>
   text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
 
-const LeadPipelineColumn = ({ lead, onConverted }) => {
+const LeadPipelineColumn = ({ lead, onConverted, activeStage, onRefresh }) => {
   const navigate = useNavigate();
   const menuRef = useRef();
 
   const [openMenu, setOpenMenu] = useState(false);
   const [selectedLead, setSelectedLead] = useState(null);
+  const [editingCustomerId, setEditingCustomerId] = useState(null);
   const [converting, setConverting] = useState(false);
   const [converted, setConverted] = useState(false);
 
@@ -41,6 +43,9 @@ const LeadPipelineColumn = ({ lead, onConverted }) => {
   const plan = (lead?.plan || "").toLowerCase();
   const stage = (lead?.status || "new").toLowerCase();
   const isConverted = lead?.is_customer === true || lead?.is_customer === "true";
+  const customerId = lead?.customer_id || lead?.crm_customer_id || lead?.erp_customer_id;
+  const isCustomerRecord = lead?.record_type === "customer";
+  const isConvertedLeadView = activeStage === "Converted Lead" && customerId && (converted || isCustomerRecord);
 
   // Track conversion locally so UI updates immediately
   useEffect(() => {
@@ -97,6 +102,31 @@ const handleDelete = async () => {
   }
 };
 
+const handleDeleteCustomer = async () => {
+  if (!customerId) {
+    alert("Customer record not found for this converted lead.");
+    return;
+  }
+
+  const confirmDelete = window.confirm(
+    `Delete converted customer ${name}?`
+  );
+
+  if (!confirmDelete) return;
+
+  try {
+    await axios.delete(
+      `${API_BASE_URL}/api/customers/${customerId}`
+    );
+
+    alert("Converted customer deleted successfully");
+    onRefresh?.();
+  } catch (err) {
+    console.error(err);
+    alert("Delete failed: " + (err.response?.data?.message || err.message));
+  }
+};
+
 const handleConvertToCustomer = async () => {
   if (converted || converting) {
     alert("This lead has already been converted to a customer.");
@@ -148,17 +178,29 @@ const handleConvertToCustomer = async () => {
 
             {openMenu && (
               <div className="absolute right-0 top-7 w-32 bg-white border rounded-lg shadow-md z-50">
-                <button
-                  onClick={() => {
-                    setSelectedLead(lead);
-                    setOpenMenu(false);
-                  }}
-                  className="w-full text-left px-3 py-2 hover:bg-gray-100"
-                >
-                  View
-                </button>
+                {!isConvertedLeadView && (
+                  <button
+                    onClick={() => {
+                      setSelectedLead(lead);
+                      setOpenMenu(false);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-gray-100"
+                  >
+                    View
+                  </button>
+                )}
 
-                {!(stage === "won" && converted) && (
+                {isConvertedLeadView ? (
+                  <button
+                    onClick={() => {
+                      setEditingCustomerId(customerId);
+                      setOpenMenu(false);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-gray-100"
+                  >
+                    Edit
+                  </button>
+                ) : !(stage === "won" && converted) && (
                   <button
                     onClick={() => {
                       navigate(
@@ -177,7 +219,8 @@ const handleConvertToCustomer = async () => {
 
                 <button
   onClick={() => {
-    handleDelete();
+    if (isConvertedLeadView) handleDeleteCustomer();
+    else handleDelete();
     setOpenMenu(false);
   }}
   className="w-full text-left px-3 py-2 hover:bg-red-100 text-red-500"
@@ -244,6 +287,12 @@ const handleConvertToCustomer = async () => {
     </span>
   )}
 
+  {isConvertedLeadView && (
+    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-50 text-green-600">
+      Customer
+    </span>
+  )}
+
   {/* {stage === "won" && !lead.is_customer && ( */}
    {stage === "won" && !converted && (
   <button
@@ -262,6 +311,7 @@ const handleConvertToCustomer = async () => {
         <div className="border-t border-gray-100 my-4" />
 
         {/* PIPELINE */}
+        {!isConvertedLeadView && (
         <div>
           <div className="relative flex items-center justify-between mb-3">
             <div className="absolute top-[5px] left-0 w-full h-[2px] bg-gray-200 rounded-full" />
@@ -324,6 +374,7 @@ const handleConvertToCustomer = async () => {
           </div>
  
         </div>
+        )}
       </div>
 
       {/* VIEW MODAL */}
@@ -333,6 +384,19 @@ const handleConvertToCustomer = async () => {
           onClose={() =>
             setSelectedLead(null)
           }
+        />
+      )}
+
+      {editingCustomerId && (
+        <CustomerFormPage
+          propId={editingCustomerId}
+          modalMode={true}
+          onClose={() => setEditingCustomerId(null)}
+          onCustomerAdded={() => {
+            setEditingCustomerId(null);
+            onRefresh?.();
+          }}
+          onRefresh={onRefresh}
         />
       )}
      

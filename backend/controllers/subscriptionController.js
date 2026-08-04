@@ -7,6 +7,7 @@ const {
   calculateSubscriptionDates,
   getPlanForSubscription,
 } = require("../services/subscriptionDateService");
+const erpApiClient = require("../integration/services/erpApiClient");
 
 const formatIntegrationResult = (result) => ({
   skipped: result.skipped,
@@ -191,24 +192,39 @@ const getSubscriptionHistory = async (req, res) => {
 };
 
 // ── GET customer stats ──────────────────────────────────────────────────────
+const unwrapErpCustomers = (response) =>
+  response?.customers || response?.data?.customers || (Array.isArray(response) ? response : []);
+
 const getCustomerStats = async (req, res) => {
   try {
     const selectedYear = Number(req.query.year) || new Date().getFullYear();
-    const result = await pool.query(`
-      SELECT
-        TO_CHAR(created_at, 'Mon') AS month,
-        EXTRACT(MONTH FROM created_at) AS month_num,
-        COUNT(*)::int AS users
-      FROM customers
-      WHERE EXTRACT(YEAR FROM created_at) = $1
-      GROUP BY month, month_num
-      ORDER BY month_num
-    `, [selectedYear]);
+    const data = await erpApiClient.getCustomers();
+    const monthCounts = new Map();
 
-    res.json(result.rows);
+    unwrapErpCustomers(data).forEach((customer) => {
+      const date = new Date(customer.created_at || customer.createdAt || customer.start_date);
+      if (Number.isNaN(date.getTime()) || date.getFullYear() !== selectedYear) return;
+
+      const monthNum = date.getMonth() + 1;
+      monthCounts.set(monthNum, (monthCounts.get(monthNum) || 0) + 1);
+    });
+
+    const rows = Array.from(monthCounts.entries())
+      .sort(([left], [right]) => left - right)
+      .map(([monthNum, users]) => ({
+        month: new Date(selectedYear, monthNum - 1, 1).toLocaleString("en-US", { month: "short" }),
+        month_num: monthNum,
+        users,
+      }));
+
+    res.json(rows);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 502).json({
+      success: false,
+      error: err.message,
+      details: err.details,
+    });
   }
 };
 

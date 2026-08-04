@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { API_BASE_URL } from "../config/api";
+import { API_BASE_URL, unwrapCustomerList } from "../config/api";
 
 import StatsCards from "../components/dashboard/StatsCards";
 import PlanUsageSection from "../components/dashboard/PlanUsageSection";
@@ -30,7 +30,7 @@ useEffect(() => {
         `${API_BASE_URL}/api/dashboard/stats`
       );
 
-      setCustomers(customersRes.data);
+      setCustomers(unwrapCustomerList(customersRes.data));
       setChartData(statsRes.data);
       setStats(dashboardStatsRes.data?.data || null);
     } catch (err) {

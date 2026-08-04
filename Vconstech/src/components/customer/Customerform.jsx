@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import Select from "react-select";
 import { FiX } from "react-icons/fi";
 import axios from "axios";
-import { API_BASE_URL } from "../../config/api";
+import { API_BASE_URL, unwrapCustomer, unwrapCustomerList } from "../../config/api";
 
 const YELLOW = "#F5C518";
 
@@ -142,12 +142,14 @@ export default function CustomerFormPage({
       try {
         setLoading(true);
         const res = await axios.get(`${API_BASE_URL}/api/customers/${id}`);
-        const data = res.data;
+        const data = unwrapCustomer(res.data);
         setForm({
           customer_name: data.customer_name || "",
           company_name: data.company_name || "",
           phone: String(data.phone || "").replace(/\D/g, ""),
           email: data.email || "",
+          address: data.address || "",
+          location: data.location || data.city || "",
           subscription_plan: findPlan(data.subscription_plan),
           purchase_date: toInputDate(data.start_date),
           renewal_date: toInputDate(data.renewal_date),
@@ -196,7 +198,7 @@ export default function CustomerFormPage({
     const currentId = String(id || "");
     const email = form.email.trim().toLowerCase();
     const phone = form.phone.trim();
-    const duplicate = (Array.isArray(data) ? data : []).find((customer) => {
+    const duplicate = unwrapCustomerList(data).find((customer) => {
       if (String(customer.id) === currentId) return false;
       return (
         String(customer.email || "").trim().toLowerCase() === email ||
@@ -250,6 +252,8 @@ export default function CustomerFormPage({
         company_name: form.company_name.trim(),
         phone: form.phone.trim(),
         email: form.email.trim(),
+        address: form.address.trim(),
+        location: form.location.trim(),
         subscription_plan: form.subscription_plan.label,
         notes: form.notes.trim(),
       };

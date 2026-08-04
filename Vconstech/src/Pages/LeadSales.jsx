@@ -9,7 +9,8 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 
 const WORK_FILTERS = ["All Works", "Active Works", "Done Works", "Unassigned Works"];
-const STAGE_FILTERS = ["All", "New", "Contacted", "Qualified", "Proposal", "Won", "Lost"];
+const CONVERTED_STAGE = "Converted Lead";
+const STAGE_FILTERS = ["All", "New", "Contacted", "Qualified", "Proposal", "Won", "Lost", CONVERTED_STAGE];
 const DONE_STATUSES = ["completed", "converted", "done"];
 
 const normalizeFilterValue = (value) => {
@@ -19,6 +20,7 @@ const normalizeFilterValue = (value) => {
 
 const getLeadStatus = (lead) => String(lead?.status || "").toLowerCase();
 const isConverted = (lead) => lead?.is_customer === true || lead?.is_customer === "true";
+const isCustomerRecord = (item) => item?.record_type === "customer";
 const isDoneLead = (lead) =>isConverted(lead) || DONE_STATUSES.includes(getLeadStatus(lead));
 const isActiveLead = (lead) => !isDoneLead(lead) && getLeadStatus(lead) !== "lost";
 const isUnassignedLead = (lead) => String(lead?.assigned_to ?? "").trim() === "";
@@ -43,12 +45,29 @@ const matchesWorkFilter = (lead, workFilter) => {
   return true;
 };
 
-const buildStageData = (leads) =>
+const mapCustomerToPipelineItem = (customer) => ({
+  ...customer,
+  id: `customer-${customer.id}`,
+  customer_id: customer.id,
+  record_type: "customer",
+  is_customer: true,
+  name: customer.customer_name || customer.name,
+  full_name: customer.customer_name || customer.name,
+  company: customer.company_name || customer.company,
+  plan: customer.subscription_plan,
+  status: "converted",
+});
+
+const buildStageData = (leads, convertedCustomers) =>
   STAGE_FILTERS.map((stage) => ({
     stage,
     leads:
       stage === "All"
         ? leads
+        : stage === CONVERTED_STAGE
+        ? convertedCustomers.map(mapCustomerToPipelineItem)
+        : stage === "Won"
+        ? leads.filter((lead) => getLeadStatus(lead) === "won" && !isConverted(lead))
         : leads.filter((lead) => getLeadStatus(lead) === stage.toLowerCase()),
   }));
 
@@ -63,11 +82,13 @@ const LeadSales = () => {
 
   const fetchLeads = async () => {
   try {
-    const res = await axios.get(
-      `${API_BASE_URL}/api/leads`
-    );
+    const [leadsRes, convertedCustomersRes] = await Promise.all([
+      axios.get(`${API_BASE_URL}/api/leads`),
+      axios.get(`${API_BASE_URL}/api/customers/converted-leads`),
+    ]);
 
-    setLeads(uniqueLeadsById(res.data || []));
+    setLeads(uniqueLeadsById(leadsRes.data || []));
+    setConvertedCustomers(convertedCustomersRes.data || []);
     setRefreshKey((k) => k + 1);
   } catch (err) {
     console.log(err);
@@ -81,9 +102,10 @@ const LeadSales = () => {
   const [activeStage, setActiveStage] = useState("All");
   const [activePlan,  setActivePlan]  = useState("All");
 const [leads, setLeads] = useState([]);
+const [convertedCustomers, setConvertedCustomers] = useState([]);
 
 const workCounts = buildWorkCounts(leads);
-const leadsData = buildStageData(leads);
+const leadsData = buildStageData(leads, convertedCustomers);
 
  const filteredLeads = leadsData
   .map((stageData) => ({
@@ -100,6 +122,7 @@ const leadsData = buildStageData(leads);
           lead.email,
           lead.phone,
           lead.plan,
+          lead.subscription_plan,
           lead.status,
           lead.channel,
           lead.address,
@@ -108,8 +131,9 @@ const leadsData = buildStageData(leads);
         ].some((value) => includesSearch(value, search));
 
       const matchesWork = matchesWorkFilter(lead, activeWorkFilter);
+      const matchesCustomerStage = activeStage === CONVERTED_STAGE && isCustomerRecord(lead);
 
-      let matchesStage = activeStage === "All" || stageData.stage === activeStage;
+      let matchesStage = matchesCustomerStage || activeStage === "All" || stageData.stage === activeStage;
 
 // Special handling for Won stage
 if (activeStage === "Won") {
@@ -130,9 +154,9 @@ if (activeStage === "Won") {
 
       const matchesPlan =
         activePlan === "All" ||
-        normalizeFilterValue(lead.plan) === normalizeFilterValue(activePlan);
+        normalizeFilterValue(lead.plan || lead.subscription_plan) === normalizeFilterValue(activePlan);
 
-      return matchesWork && matchesSearch && matchesStage && matchesPlan;
+      return (matchesCustomerStage || matchesWork) && matchesSearch && matchesStage && matchesPlan;
     }),
   }))
   .filter((stage) => activeStage === "All" || stage.stage === activeStage);
@@ -180,7 +204,11 @@ if (activeStage === "Won") {
 
   {/* PIPELINE AREA */}
   <div className="p-2 sm:p-4 md:p-5">
-    <LeadPipelineSection leadsData={filteredLeads} />
+      <LeadPipelineSection
+        leadsData={filteredLeads}
+        activeStage={activeStage}
+        onRefresh={fetchLeads}
+      />
   </div>
 
 </div>

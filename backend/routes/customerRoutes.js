@@ -5,6 +5,7 @@ const subscriptionController = require("../controllers/subscriptionController");
 
 router.post("/", customerController.createCustomer);
 router.get("/", customerController.getAllCustomers);
+router.get("/converted-leads", customerController.getConvertedLeadCustomers);
 
 router.get("/subscription-history/:customerId", subscriptionController.getSubscriptionHistory);
 router.get("/stats/monthly", subscriptionController.getCustomerStats);

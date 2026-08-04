@@ -1,7 +1,7 @@
 import "../styles/customerAnimations.css";
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { API_BASE_URL } from "../config/api";
+import { API_BASE_URL, unwrapCustomer, unwrapCustomerList } from "../config/api";
 
 import CustomerHeader from "../components/customer/CustomerHeader";
 import CustomerStats from "../components/customer/CustomerStats";
@@ -37,6 +37,11 @@ function formatPlanLabel(plan) {
   return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
 }
 
+const isErpCustomer = (customer) =>
+  Boolean(customer?.erp_client_id) ||
+  Boolean(customer?.erp_customer_id) ||
+  String(customer?.id || "").startsWith("ERP-CUST-");
+
 // ── Active logic: true only when renewal_date is today or future ──────────────
 function csvEscape(value) {
   const text = value == null ? "" : String(value);
@@ -63,12 +68,18 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
     loadCustomers();
   }, []);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, tableSearch, planFilter, rowsPerPage]);
+
   const loadCustomers = async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/api/customers`);
 
-      const normalized = res.data.map((c) => ({
+      const normalized = unwrapCustomerList(res.data).filter(isErpCustomer).map((c) => ({
         id:           c.id,
+        erp_customer_id: c.erp_customer_id,
+        erp_client_id: c.erp_client_id,
         name:         c.customer_name || c.name || "",
         email:        c.email         || "",
         phone:        c.phone         || "",
@@ -93,7 +104,7 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
       const res = await axios.patch(`${API_BASE_URL}/api/customers/${c.id}/status`, {
         active: nextActive,
       });
-      const updated = res.data.customer;
+      const updated = unwrapCustomer(res.data);
       setCustomers((prev) =>
         prev.map((item) =>
           item.id === c.id
@@ -111,7 +122,7 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
       );
       if (selectedCustomer?.id === c.id) {
         const detail = await axios.get(`${API_BASE_URL}/api/customers/${c.id}`);
-        setSelectedCustomer(detail.data);
+        setSelectedCustomer(unwrapCustomer(detail.data));
       }
     } catch (err) {
       alert("Status update failed: " + (err.response?.data?.message || err.message));
@@ -127,7 +138,7 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
   const handleView = async (customer) => {
     try {
       const res = await axios.get(`${API_BASE_URL}/api/customers/${customer.id}`);
-      setSelectedCustomer(res.data);
+      setSelectedCustomer(unwrapCustomer(res.data));
       setViewOpen(true);
     } catch (err) {
       console.error(err);
@@ -224,14 +235,14 @@ const handleExport = () => {
 
     const search = (tableSearch || "").toLowerCase();
     const matchesSearch =
-       String(c.id || "").toLowerCase().includes(search) ||
-      (c.name    || "").toLowerCase().includes(search) ||
-      (c.company    || "").toLowerCase().includes(search) ||
-      (c.plan    || "").toLowerCase().includes(search) ||
-      
-
-
-      (c.email   || "").toLowerCase().includes(search) 
+      String(c.id || "").toLowerCase().includes(search) ||
+      String(c.erp_customer_id || "").toLowerCase().includes(search) ||
+      String(c.erp_client_id || "").toLowerCase().includes(search) ||
+      (c.name || "").toLowerCase().includes(search) ||
+      (c.company || "").toLowerCase().includes(search) ||
+      (c.plan || "").toLowerCase().includes(search) ||
+      (c.phone || "").toLowerCase().includes(search) ||
+      (c.email || "").toLowerCase().includes(search);
 
     const matchesPlan =
       planFilter.length === 0 || planFilter.includes(c.plan);
@@ -240,6 +251,10 @@ const handleExport = () => {
     
   });
 const totalPages = Math.max(1, Math.ceil(filteredCustomers.length / rowsPerPage));
+
+useEffect(() => {
+  if (currentPage > totalPages) setCurrentPage(totalPages);
+}, [currentPage, totalPages]);
 
 const paginatedCustomers = filteredCustomers.slice(
   (currentPage - 1) * rowsPerPage,
