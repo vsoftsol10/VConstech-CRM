@@ -6,9 +6,11 @@ import StatsCards from "../components/dashboard/StatsCards";
 import PlanUsageSection from "../components/dashboard/PlanUsageSection";
 import ActiveUsersChart from "../components/dashboard/ActiveUsersChart";
 import RecentCustomers from "../components/dashboard/RecentCustomers";
+import RecentLeads from "../components/dashboard/RecentLeads";
 
 const Dashboard = () => {
   const [customers, setCustomers] = useState([]);
+  const [leads, setLeads] = useState([]);
   const [stats, setStats] = useState(null);
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
@@ -17,11 +19,12 @@ const Dashboard = () => {
 
 useEffect(() => {
   const load = async () => {
-    const [customersResult, statsResult, dashboardStatsResult] =
+    const [customersResult, statsResult, dashboardStatsResult, leadsResult] =
       await Promise.allSettled([
         axios.get(`${API_BASE_URL}/api/customers`),
         axios.get(`${API_BASE_URL}/api/customers/stats/monthly?year=${selectedYear}`),
         axios.get(`${API_BASE_URL}/api/dashboard/stats`),
+        axios.get(`${API_BASE_URL}/api/leads`),
       ]);
 
     if (customersResult.status === "fulfilled") {
@@ -41,6 +44,13 @@ useEffect(() => {
       setStats(dashboardStatsResult.value.data?.data || null);
     } else {
       console.error(dashboardStatsResult.reason);
+    }
+
+    if (leadsResult.status === "fulfilled") {
+      setLeads(Array.isArray(leadsResult.value.data) ? leadsResult.value.data : []);
+    } else {
+      setLeads([]);
+      console.error(leadsResult.reason);
     }
   };
 
@@ -63,6 +73,8 @@ useEffect(() => {
         yearOptions={yearOptions}
         onYearChange={setSelectedYear}
       />
+
+      <RecentLeads leads={leads} />
 
       <RecentCustomers customers={customers} />
     </div>
