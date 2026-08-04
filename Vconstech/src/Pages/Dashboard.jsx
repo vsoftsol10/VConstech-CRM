@@ -17,24 +17,30 @@ const Dashboard = () => {
 
 useEffect(() => {
   const load = async () => {
-    try {
-      const customersRes = await axios.get(
-        `${API_BASE_URL}/api/customers`
-      );
+    const [customersResult, statsResult, dashboardStatsResult] =
+      await Promise.allSettled([
+        axios.get(`${API_BASE_URL}/api/customers`),
+        axios.get(`${API_BASE_URL}/api/customers/stats/monthly?year=${selectedYear}`),
+        axios.get(`${API_BASE_URL}/api/dashboard/stats`),
+      ]);
 
-      const statsRes = await axios.get(
-        `${API_BASE_URL}/api/customers/stats/monthly?year=${selectedYear}`
-      );
+    if (customersResult.status === "fulfilled") {
+      setCustomers(unwrapCustomerList(customersResult.value.data));
+    } else {
+      console.error(customersResult.reason);
+    }
 
-      const dashboardStatsRes = await axios.get(
-        `${API_BASE_URL}/api/dashboard/stats`
-      );
+    if (statsResult.status === "fulfilled") {
+      setChartData(Array.isArray(statsResult.value.data) ? statsResult.value.data : []);
+    } else {
+      setChartData([]);
+      console.error(statsResult.reason);
+    }
 
-      setCustomers(unwrapCustomerList(customersRes.data));
-      setChartData(statsRes.data);
-      setStats(dashboardStatsRes.data?.data || null);
-    } catch (err) {
-      console.error(err);
+    if (dashboardStatsResult.status === "fulfilled") {
+      setStats(dashboardStatsResult.value.data?.data || null);
+    } else {
+      console.error(dashboardStatsResult.reason);
     }
   };
 

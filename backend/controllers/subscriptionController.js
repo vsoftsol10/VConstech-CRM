@@ -8,6 +8,7 @@ const {
   getPlanForSubscription,
 } = require("../services/subscriptionDateService");
 const erpApiClient = require("../integration/services/erpApiClient");
+const erpSupabaseCustomerService = require("../services/erpSupabaseCustomerService");
 
 const formatIntegrationResult = (result) => ({
   skipped: result.skipped,
@@ -198,7 +199,9 @@ const unwrapErpCustomers = (response) =>
 const getCustomerStats = async (req, res) => {
   try {
     const selectedYear = Number(req.query.year) || new Date().getFullYear();
-    const data = await erpApiClient.getCustomers();
+    const data = erpSupabaseCustomerService.isConfigured()
+      ? await erpSupabaseCustomerService.getCustomers()
+      : await erpApiClient.getCustomers();
     const monthCounts = new Map();
 
     unwrapErpCustomers(data).forEach((customer) => {
