@@ -65,6 +65,15 @@ const getLocalCustomerById = async (id) => {
   return result.rows[0] || null;
 };
 
+const getLocalCustomers = async () => {
+  const result = await pool.query(
+    `SELECT ${formattedCustomerSelect}
+     FROM customers
+     ORDER BY id DESC`
+  );
+  return result.rows;
+};
+
 const updateLocalCustomer = async (id, body) => {
   const existing = await getLocalCustomerById(id);
   if (!existing) return null;
@@ -178,6 +187,11 @@ const createCustomer = async (req, res) => {
 
 const getAllCustomers = async (req, res) => {
   try {
+    const localCustomers = await getLocalCustomers();
+    if (localCustomers.length > 0 || req.query.source !== "erp") {
+      return res.json(localCustomers);
+    }
+
     const erpSupabaseData = erpSupabaseCustomerService.isConfigured()
       ? await erpSupabaseCustomerService.getCustomers(req.query)
       : null;
@@ -188,11 +202,15 @@ const getAllCustomers = async (req, res) => {
     const data = await erpApiClient.getCustomers(req.query);
     return res.json(unwrapErpCustomers(data));
   } catch (err) {
-    res.status(err.statusCode || 502).json({
-      success: false,
-      error: err.message,
-      details: err.details,
-    });
+    console.error("Customer source unavailable, using local CRM customers:", err.message);
+    try {
+      return res.json(await getLocalCustomers());
+    } catch (localErr) {
+      return res.status(500).json({
+        success: false,
+        error: localErr.message,
+      });
+    }
   }
 };
 

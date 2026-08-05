@@ -23,7 +23,7 @@ export default function SubscriptionPage() {
   useEffect(() => {
     const loadCustomers = async () => {
       try {
-        const res = await axios.get(`${API_BASE_URL}/api/customers`);
+        const res = await axios.get(`${API_BASE_URL}/api/customers/converted-leads`);
         setSubscriptions(unwrapCustomerList(res.data));
       } catch (err) {
         console.log("API error:", err);
@@ -57,6 +57,7 @@ export default function SubscriptionPage() {
 
     if (activeFilters.expireFrom || activeFilters.expireTo) {
       const exp = parseExpire(s.renewal_date || s.expire);
+      if (!exp || Number.isNaN(exp.getTime())) return false;
 
       if (activeFilters.expireFrom)
         matchDate =

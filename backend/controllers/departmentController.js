@@ -30,6 +30,11 @@ const memberSelect = `
 
 const formatCount = (value) => Number(value || 0).toLocaleString("en-IN");
 
+const getPublicBaseUrl = (req) =>
+  (process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`)
+    .trim()
+    .replace(/\/$/, "");
+
 const startOfToday = () => {
   const date = new Date();
   date.setHours(0, 0, 0, 0);
@@ -393,7 +398,7 @@ const deleteDepartmentMember = async (req, res) => {
   }
 };
 
-const getSalesDashboard = async (_req, res) => {
+const getSalesDashboard = async (req, res) => {
   try {
     const [membersResult, leadsResult, tasksResult] = await Promise.all([
       pool.query(
@@ -489,6 +494,7 @@ const getSalesDashboard = async (_req, res) => {
       },
     ];
 
+    const publicBaseUrl = getPublicBaseUrl(req);
     const teamMembers = members.map((member, index) => {
       const assignedLeads = leads.filter(
         (lead) =>
@@ -510,7 +516,7 @@ const getSalesDashboard = async (_req, res) => {
         name: member.name,
         role: member.designation || member.role || "Sales Executive",
         avatar: member.profile_image
-          ? `http://localhost:5000/uploads/${member.profile_image}`
+          ? `${publicBaseUrl}/uploads/${member.profile_image}`
           : `https://i.pravatar.cc/100?u=${encodeURIComponent(member.employee_id || member.id)}`,
         leadsAssigned: assignedLeads.length,
         dealsWon: memberWonLeads.length,

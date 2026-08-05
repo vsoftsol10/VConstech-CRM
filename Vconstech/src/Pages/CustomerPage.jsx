@@ -1,7 +1,7 @@
 import "../styles/customerAnimations.css";
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { API_BASE_URL, unwrapCustomer, unwrapCustomerList } from "../config/api";
+import { API_BASE_URL,ERP_API_BASE_URL, unwrapCustomer, unwrapCustomerList } from "../config/api";
 
 import CustomerHeader from "../components/customer/CustomerHeader";
 import CustomerStats from "../components/customer/CustomerStats";
@@ -37,11 +37,6 @@ function formatPlanLabel(plan) {
   return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
 }
 
-const isErpCustomer = (customer) =>
-  Boolean(customer?.erp_client_id) ||
-  Boolean(customer?.erp_customer_id) ||
-  String(customer?.id || "").startsWith("ERP-CUST-");
-
 // ── Active logic: true only when renewal_date is today or future ──────────────
 function csvEscape(value) {
   const text = value == null ? "" : String(value);
@@ -74,22 +69,22 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const loadCustomers = async () => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/api/customers`);
+      const res = await axios.get(`${ERP_API_BASE_URL}/superadmin/users`);
 
-      const normalized = unwrapCustomerList(res.data).filter(isErpCustomer).map((c) => ({
+      const normalized = unwrapCustomerList(res.data).map((c) => ({
         id:           c.id,
         erp_customer_id: c.erp_customer_id,
-        erp_client_id: c.erp_client_id,
+        erp_client_id: c.erp_client_id || c.companyId,
         name:         c.customer_name || c.name || "",
         email:        c.email         || "",
-        phone:        c.phone         || "",
-        company:      c.company_name  || "",
-        plan:         formatPlanLabel(c.subscription_plan),
-        planColor:    getPlanColor(c.subscription_plan),
-        start_date:   c.start_date    || "",
+        phone:        c.phone         || c.phoneNumber || "",
+        company:      c.company_name  || c.company?.name || "",
+        plan:         formatPlanLabel(c.subscription_plan || c.package),
+        planColor:    getPlanColor(c.subscription_plan || c.package),
+        start_date:   c.start_date    || c.createdAt || "",
         renewal_date: c.renewal_date  || "",   // ← carry through for active check
-        active:       Boolean(c.active),
-        members:      c.members ?? "",
+        active:       Boolean(c.active ?? c.isActive),
+        members:      c.members ?? c.customMembers ?? "",
       }));
 
       setCustomers(normalized);

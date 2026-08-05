@@ -8,6 +8,54 @@ import ActiveUsersChart from "../components/dashboard/ActiveUsersChart";
 import RecentCustomers from "../components/dashboard/RecentCustomers";
 import RecentLeads from "../components/dashboard/RecentLeads";
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+const isCustomerLead = (lead) => {
+  const status = String(lead?.status || "").trim().toLowerCase();
+  return Boolean(lead?.is_customer) || status === "won" || status === "converted";
+};
+
+const leadToCustomer = (lead) => ({
+  id: lead.id,
+  customer_name: lead.full_name || lead.company || "Unnamed customer",
+  company_name: lead.company || "",
+  email: lead.email || "",
+  phone: lead.phone || "",
+  channel: lead.channel || "",
+  subscription_plan: lead.plan || "Unknown",
+  active: true,
+  start_date: lead.lead_date || lead.created_at || "",
+  renewal_date: "",
+  created_at: lead.created_at || lead.lead_date || "",
+});
+
+const buildMonthlyData = (rows, selectedYear) => {
+  const counts = new Map();
+
+  rows.forEach((row) => {
+    const date = new Date(
+      row.created_at ||
+      row.createdAt ||
+      row.start_date ||
+      row.lead_date ||
+      row.subscription_start_date
+    );
+
+    if (Number.isNaN(date.getTime()) || date.getFullYear() !== selectedYear) return;
+
+    const month = date.getMonth();
+    counts.set(month, (counts.get(month) || 0) + 1);
+  });
+
+  return Array.from(counts.entries())
+    .sort(([left], [right]) => left - right)
+    .map(([month, users]) => ({
+      month: MONTHS[month],
+      month_num: month + 1,
+      users,
+    }));
+};
+
 const Dashboard = () => {
   const [customers, setCustomers] = useState([]);
   const [leads, setLeads] = useState([]);
@@ -19,26 +67,30 @@ const Dashboard = () => {
 
 useEffect(() => {
   const load = async () => {
-    const [customersResult, statsResult, dashboardStatsResult, leadsResult] =
+    const [customersResult, dashboardStatsResult, leadsResult] =
       await Promise.allSettled([
-        axios.get(`${API_BASE_URL}/api/customers`),
-        axios.get(`${API_BASE_URL}/api/customers/stats/monthly?year=${selectedYear}`),
+        axios.get(`${API_BASE_URL}/api/customers/converted-leads`),
         axios.get(`${API_BASE_URL}/api/dashboard/stats`),
         axios.get(`${API_BASE_URL}/api/leads`),
       ]);
 
+    const leadRows =
+      leadsResult.status === "fulfilled" && Array.isArray(leadsResult.value.data)
+        ? leadsResult.value.data
+        : [];
+
+    const customerRows =
+      customersResult.status === "fulfilled"
+        ? unwrapCustomerList(customersResult.value.data)
+        : leadRows.filter(isCustomerLead).map(leadToCustomer);
+
     if (customersResult.status === "fulfilled") {
-      setCustomers(unwrapCustomerList(customersResult.value.data));
+      setCustomers(customerRows);
     } else {
-      console.error(customersResult.reason);
+      setCustomers(customerRows);
     }
 
-    if (statsResult.status === "fulfilled") {
-      setChartData(Array.isArray(statsResult.value.data) ? statsResult.value.data : []);
-    } else {
-      setChartData([]);
-      console.error(statsResult.reason);
-    }
+    setChartData(buildMonthlyData(customerRows, selectedYear));
 
     if (dashboardStatsResult.status === "fulfilled") {
       setStats(dashboardStatsResult.value.data?.data || null);
@@ -46,12 +98,7 @@ useEffect(() => {
       console.error(dashboardStatsResult.reason);
     }
 
-    if (leadsResult.status === "fulfilled") {
-      setLeads(Array.isArray(leadsResult.value.data) ? leadsResult.value.data : []);
-    } else {
-      setLeads([]);
-      console.error(leadsResult.reason);
-    }
+    setLeads(leadRows);
   };
 
   load();
@@ -63,9 +110,9 @@ useEffect(() => {
         Dashboard
       </h1>
 
-      <StatsCards customers={customers} stats={stats} />
+      <StatsCards customers={customers} leads={leads} stats={stats} />
 
-      <PlanUsageSection customers={customers} />
+      <PlanUsageSection customers={customers} leads={leads} />
 
       <ActiveUsersChart
         data={chartData}
@@ -74,7 +121,7 @@ useEffect(() => {
         onYearChange={setSelectedYear}
       />
 
-      <RecentLeads leads={leads} />
+      {/* <RecentLeads leads={leads} /> */}
 
       <RecentCustomers customers={customers} />
     </div>

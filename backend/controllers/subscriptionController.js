@@ -199,12 +199,35 @@ const unwrapErpCustomers = (response) =>
 const getCustomerStats = async (req, res) => {
   try {
     const selectedYear = Number(req.query.year) || new Date().getFullYear();
-    const data = erpSupabaseCustomerService.isConfigured()
-      ? await erpSupabaseCustomerService.getCustomers()
-      : await erpApiClient.getCustomers();
+    let customers = [];
+
+    try {
+      if (req.query.source === "erp") {
+        const data = erpSupabaseCustomerService.isConfigured()
+          ? await erpSupabaseCustomerService.getCustomers()
+          : await erpApiClient.getCustomers();
+        customers = unwrapErpCustomers(data);
+      } else {
+        const localResult = await pool.query(
+          `SELECT created_at, start_date
+           FROM customers
+           ORDER BY id DESC`
+        );
+        customers = localResult.rows;
+      }
+    } catch (sourceErr) {
+      console.error("Customer stats source unavailable, using local CRM customers:", sourceErr.message);
+      const localResult = await pool.query(
+        `SELECT created_at, start_date
+         FROM customers
+         ORDER BY id DESC`
+      );
+      customers = localResult.rows;
+    }
+
     const monthCounts = new Map();
 
-    unwrapErpCustomers(data).forEach((customer) => {
+    customers.forEach((customer) => {
       const date = new Date(customer.created_at || customer.createdAt || customer.start_date);
       if (Number.isNaN(date.getTime()) || date.getFullYear() !== selectedYear) return;
 

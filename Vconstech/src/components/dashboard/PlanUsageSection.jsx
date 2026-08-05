@@ -13,14 +13,15 @@ const formatLeadChannel = (value) => {
   return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
 };
 
-export default function PlanUsageSection({ customers = [] }) {
-  const total = customers.length;
+export default function PlanUsageSection({ customers = [], leads = [] }) {
+  const planRows = customers.length ? customers : leads;
+  const total = planRows.length;
 
   // ───────── PLAN (BAR) ─────────
   const planMap = {};
 
-  customers.forEach((c) => {
-    const plan = (c.subscription_plan || "unknown").trim().toLowerCase();
+  planRows.forEach((item) => {
+    const plan = (item.subscription_plan || item.plan || "unknown").trim().toLowerCase();
     planMap[plan] = (planMap[plan] || 0) + 1;
   });
 
@@ -32,8 +33,8 @@ export default function PlanUsageSection({ customers = [] }) {
   // ───────── CHANNEL (PIE) ─────────
   const channelMap = {};
 
-  customers.forEach((c) => {
-    const channel = formatLeadChannel(c.channel);
+  leads.forEach((lead) => {
+    const channel = formatLeadChannel(lead.channel);
     if (!channel) return;
 
     channelMap[channel] = (channelMap[channel] || 0) + 1;
@@ -88,10 +89,10 @@ export default function PlanUsageSection({ customers = [] }) {
       >
         <h2 className="font-semibold mb-4">Lead Channels</h2>
 
-        <div className="flex gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
 
           {/* LEGEND */}
-          <div>
+          <div className="min-w-[120px]">
             {chartData.length ? chartData.map((item) => (
               <div key={item.name} className="flex items-center gap-2 mb-2">
                 <span
@@ -109,8 +110,8 @@ export default function PlanUsageSection({ customers = [] }) {
           </div>
 
           {/* PIE */}
-          <div className="h-[180px] flex-1">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-[180px] min-w-[180px] flex-1">
+            <ResponsiveContainer width="100%" height={180} minWidth={180}>
               <PieChart>
                 <Pie
   data={chartData}

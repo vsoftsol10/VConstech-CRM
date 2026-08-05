@@ -1,9 +1,9 @@
 import { motion } from "framer-motion";
 import { FiDatabase, FiUsers, FiTrendingUp, FiTrendingDown,FiUserCheck,FiUserX } from "react-icons/fi";
 
-export default function CustomerStats({ customers = [], stats }) {
+export default function CustomerStats({ customers = [], leads = [], stats }) {
 
-  const total = stats?.customers ?? customers.length;
+  const total = customers.length || stats?.customers || 0;
   const active = customers.filter(c => c.active).length;
   const inactive = total - active;
 
@@ -24,9 +24,9 @@ const cards = [
   },
   {
     title: "Total Generated Leads",
-    value: stats?.leads ?? 0,
+    value: leads.length || stats?.leads || 0,
     subtitle: "All generated leads",
-    growth: `${stats?.leads ?? 0}`,
+    growth: `${leads.length || stats?.leads || 0}`,
     type: "up",
     icon: FiDatabase,
   },
