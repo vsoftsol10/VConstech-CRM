@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import Select from "react-select";
 import { FiX } from "react-icons/fi";
 import axios from "axios";
-import { API_BASE_URL, unwrapCustomer, unwrapCustomerList } from "../../config/api";
+import { API_BASE_URL, ERP_API_BASE_URL, unwrapCustomer, unwrapCustomerList } from "../../config/api";
 
 const YELLOW = "#F5C518";
 
@@ -91,8 +91,25 @@ function findPlan(value) {
   return PLANS.find((item) => item.label.toLowerCase() === String(value || "").toLowerCase()) || null;
 }
 
+function customerToForm(data = {}) {
+  return {
+    customer_name: data.customer_name || data.name || "",
+    company_name: data.company_name || data.company || data.company?.name || "",
+    phone: String(data.phone || data.phoneNumber || "").replace(/\D/g, ""),
+    email: data.email || "",
+    address: data.address || "",
+    location: data.location || data.city || "",
+    subscription_plan: findPlan(data.subscription_plan || data.plan || data.package),
+    purchase_date: toInputDate(data.start_date || data.createdAt),
+    renewal_date: toInputDate(data.renewal_date),
+    notes: data.notes || "",
+  };
+}
+
 export default function CustomerFormPage({
   propId,
+  initialCustomer,
+  source,
   onClose,
   modalMode = false,
   isNew = false,
@@ -101,6 +118,7 @@ export default function CustomerFormPage({
 }) {
   const { id: paramId } = useParams();
   const id = propId || paramId;
+  const isErpCustomer = source === "erp" || initialCustomer?.source === "erp";
   const navigate = useNavigate();
   const [form, setForm] = useState({
     customer_name: "",
@@ -116,7 +134,7 @@ export default function CustomerFormPage({
     notes: "",
   });
   const [errors, setErrors] = useState({});
-  const [loading, setLoading] = useState(!isNew && Boolean(id));
+  const [loading, setLoading] = useState(!isNew && Boolean(id) && !initialCustomer);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -137,24 +155,20 @@ export default function CustomerFormPage({
   }, [modalMode, onClose]);
 
   useEffect(() => {
+    if (isNew || !initialCustomer) return;
+    setForm(customerToForm(initialCustomer));
+    setLoading(false);
+  }, [initialCustomer, isNew]);
+
+  useEffect(() => {
+    if (isErpCustomer) return;
     if (isNew || !id) return;
     const loadCustomer = async () => {
       try {
         setLoading(true);
         const res = await axios.get(`${API_BASE_URL}/api/customers/${id}`);
         const data = unwrapCustomer(res.data);
-        setForm({
-          customer_name: data.customer_name || "",
-          company_name: data.company_name || "",
-          phone: String(data.phone || "").replace(/\D/g, ""),
-          email: data.email || "",
-          address: data.address || "",
-          location: data.location || data.city || "",
-          subscription_plan: findPlan(data.subscription_plan),
-          purchase_date: toInputDate(data.start_date),
-          renewal_date: toInputDate(data.renewal_date),
-          notes: data.notes || "",
-        });
+        setForm(customerToForm(data));
       } catch (err) {
         setErrors({ form: err.response?.data?.message || "Failed to load customer" });
       } finally {
@@ -162,7 +176,7 @@ export default function CustomerFormPage({
       }
     };
     loadCustomer();
-  }, [id, isNew]);
+  }, [id, isErpCustomer, isNew]);
 
   const set = (field) => (e) => {
     const rawValue = e.target.value;
@@ -190,14 +204,41 @@ export default function CustomerFormPage({
     if (!email) next.email = "Email is required";
     else if (!emailPattern.test(email)) next.email = "Enter a valid email address";
     if (!form.subscription_plan) next.subscription_plan = "Plan is required";
+    if (isErpCustomer) {
+      if (!form.company_name.trim()) next.company_name = "Company is required";
+      if (!form.location.trim()) next.location = "Location is required";
+      if (!form.address.trim()) next.address = "Address is required";
+    }
     return next;
   };
 
   const checkDuplicates = async () => {
-    const { data } = await axios.get(`${API_BASE_URL}/api/customers`);
     const currentId = String(id || "");
     const email = form.email.trim().toLowerCase();
     const phone = form.phone.trim();
+
+    if (isErpCustomer) {
+      const { data } = await axios.get(`${ERP_API_BASE_URL}/superadmin/users`);
+      const duplicate = unwrapCustomerList(data).find((customer) => {
+        if (String(customer.id) === currentId) return false;
+        return (
+          String(customer.email || "").trim().toLowerCase() === email ||
+          String(customer.phoneNumber || customer.phone || "").replace(/\D/g, "") === phone
+        );
+      });
+
+      if (!duplicate) return {};
+      return {
+        ...(String(duplicate.email || "").trim().toLowerCase() === email
+          ? { email: "This email address already exists." }
+          : {}),
+        ...(String(duplicate.phoneNumber || duplicate.phone || "").replace(/\D/g, "") === phone
+          ? { phone: "This phone number already exists." }
+          : {}),
+      };
+    }
+
+    const { data } = await axios.get(`${API_BASE_URL}/api/customers`);
     const duplicate = unwrapCustomerList(data).find((customer) => {
       if (String(customer.id) === currentId) return false;
       return (
@@ -228,7 +269,9 @@ export default function CustomerFormPage({
       setErrors(apiErrors);
       return;
     }
-    setErrors({ form: err.response?.data?.message || "Failed to save customer" });
+    setErrors({
+      form: err.response?.data?.message || err.response?.data?.error || "Failed to save customer",
+    });
   };
 
   const handleSubmit = async () => {
@@ -258,7 +301,22 @@ export default function CustomerFormPage({
         notes: form.notes.trim(),
       };
 
-      if (isNew) {
+      if (isErpCustomer) {
+        await axios.put(`${ERP_API_BASE_URL}/superadmin/update-user/${id}`, {
+          name: form.customer_name.trim(),
+          email: form.email.trim(),
+          phoneNumber: form.phone.trim(),
+          city: form.location.trim(),
+          address: form.address.trim(),
+          role: initialCustomer?.role || initialCustomer?.raw?.role || "Admin",
+          companyName: form.company_name.trim(),
+          package: form.subscription_plan.label,
+          customMembers:
+            form.subscription_plan.label === "Advanced"
+              ? Number(initialCustomer?.members || initialCustomer?.raw?.customMembers || 1)
+              : null,
+        });
+      } else if (isNew) {
         await axios.post(`${API_BASE_URL}/api/customers`, payload);
       } else {
         await axios.put(`${API_BASE_URL}/api/customers/${id}`, payload);

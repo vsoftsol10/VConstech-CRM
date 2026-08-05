@@ -58,6 +58,7 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
   const [viewOpen, setViewOpen]             = useState(false);
   const [formMode, setFormMode]             = useState(null); // null | "add" | "edit"
   const [editingCustomerId, setEditingCustomerId] = useState(null);
+  const [editingCustomer, setEditingCustomer] = useState(null);
 
   useEffect(() => {
     loadCustomers();
@@ -73,18 +74,27 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
 
       const normalized = unwrapCustomerList(res.data).map((c) => ({
         id:           c.id,
+        source:       "erp",
+        raw:          c,
         erp_customer_id: c.erp_customer_id,
         erp_client_id: c.erp_client_id || c.companyId,
         name:         c.customer_name || c.name || "",
+        customer_name: c.customer_name || c.name || "",
         email:        c.email         || "",
         phone:        c.phone         || c.phoneNumber || "",
         company:      c.company_name  || c.company?.name || "",
+        company_name: c.company_name  || c.company?.name || "",
         plan:         formatPlanLabel(c.subscription_plan || c.package),
+        subscription_plan: formatPlanLabel(c.subscription_plan || c.package),
         planColor:    getPlanColor(c.subscription_plan || c.package),
         start_date:   c.start_date    || c.createdAt || "",
         renewal_date: c.renewal_date  || "",   // ← carry through for active check
         active:       Boolean(c.active ?? c.isActive),
         members:      c.members ?? c.customMembers ?? "",
+        address:      c.address || "",
+        location:     c.location || c.city || "",
+        city:         c.city || c.location || "",
+        role:         c.role || "Admin",
       }));
 
       setCustomers(normalized);
@@ -96,6 +106,26 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
   const handleToggle = async (c) => {
     const nextActive = !c.active;
     try {
+      if (c.source === "erp") {
+        const res = await axios.put(`${ERP_API_BASE_URL}/superadmin/toggle-active/${c.id}`, {
+          isActive: nextActive,
+        });
+        const updated = res.data?.user || {};
+        setCustomers((prev) =>
+          prev.map((item) =>
+            item.id === c.id
+              ? { ...item, active: Boolean(updated.isActive ?? nextActive) }
+              : item
+          )
+        );
+        if (selectedCustomer?.id === c.id) {
+          setSelectedCustomer((prev) =>
+            prev ? { ...prev, active: Boolean(updated.isActive ?? nextActive) } : prev
+          );
+        }
+        return;
+      }
+
       const res = await axios.patch(`${API_BASE_URL}/api/customers/${c.id}/status`, {
         active: nextActive,
       });
@@ -131,6 +161,12 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
   };
 
   const handleView = async (customer) => {
+    if (customer.source === "erp") {
+      setSelectedCustomer(customer);
+      setViewOpen(true);
+      return;
+    }
+
     try {
       const res = await axios.get(`${API_BASE_URL}/api/customers/${customer.id}`);
       setSelectedCustomer(unwrapCustomer(res.data));
@@ -142,13 +178,19 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const handleEdit = (customer) => {
     setEditingCustomerId(customer.id);
+    setEditingCustomer(customer);
     setFormMode("edit");
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this customer?")) return;
     try {
-      await axios.delete(`${API_BASE_URL}/api/customers/${id}`);
+      const customer = customers.find((c) => c.id === id);
+      if (customer?.source === "erp") {
+        await axios.delete(`${ERP_API_BASE_URL}/superadmin/delete-user/${id}`);
+      } else {
+        await axios.delete(`${API_BASE_URL}/api/customers/${id}`);
+      }
       setCustomers((prev) => prev.filter((c) => c.id !== id));
       setSelectedCustomers((prev) => prev.filter((customerId) => customerId !== id));
       if (selectedCustomer?.id === id) setViewOpen(false);
@@ -160,11 +202,13 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
   const handleAddCustomer = () => {
     setFormMode("add");
     setEditingCustomerId(null);
+    setEditingCustomer(null);
   };
 
   const handleCloseForm = () => {
     setFormMode(null);
     setEditingCustomerId(null);
+    setEditingCustomer(null);
   };
 
   const handleFormSuccess = () => {
@@ -324,6 +368,8 @@ const paginatedCustomers = filteredCustomers.slice(
       {formMode && (
         <CustomerFormPage
           propId={formMode === "edit" ? editingCustomerId : null}
+          initialCustomer={editingCustomer}
+          source={editingCustomer?.source}
           isNew={formMode === "add"}
           modalMode={true}
           onClose={handleCloseForm}

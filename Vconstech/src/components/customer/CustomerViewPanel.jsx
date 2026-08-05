@@ -40,6 +40,10 @@ export default function CustomerViewPanel({ customer, onClose, onEdit }) {
 
   useEffect(() => {
     if (!customer?.id) return;
+    if (customer?.source === "erp") {
+      setSubscriptionHistory([]);
+      return;
+    }
     const loadHistory = async () => {
       try {
         setHistoryLoading(true);
