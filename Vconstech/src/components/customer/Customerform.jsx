@@ -91,6 +91,31 @@ function findPlan(value) {
   return PLANS.find((item) => item.label.toLowerCase() === String(value || "").toLowerCase()) || null;
 }
 
+function formatDateOnly(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getPlanDurationDays(planName) {
+  return String(planName || "").trim().toLowerCase() === "trial" ? 7 : 30;
+}
+
+function getPlanDates(planName) {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + getPlanDurationDays(planName));
+
+  return {
+    startDate: start,
+    endDate: end,
+    startDateOnly: formatDateOnly(start),
+    endDateOnly: formatDateOnly(end),
+  };
+}
+
 function customerToForm(data = {}) {
   return {
     customer_name: data.customer_name || data.name || "",
@@ -300,9 +325,16 @@ export default function CustomerFormPage({
         subscription_plan: form.subscription_plan.label,
         notes: form.notes.trim(),
       };
+      const selectedPlanName = form.subscription_plan.label;
+      const currentPlanName =
+        initialCustomer?.subscription_plan || initialCustomer?.plan || initialCustomer?.raw?.subscriptionPlan || initialCustomer?.raw?.package;
+      const planChanged =
+        String(currentPlanName || "").trim().toLowerCase() !== String(selectedPlanName || "").trim().toLowerCase();
+      const shouldStartPlan = isNew || planChanged || initialCustomer?.active === false;
+      const planDates = getPlanDates(form.subscription_plan.label);
 
       if (isErpCustomer) {
-        await axios.put(`${ERP_API_BASE_URL}/superadmin/update-user/${id}`, {
+        const erpPayload = {
           name: form.customer_name.trim(),
           email: form.email.trim(),
           phoneNumber: form.phone.trim(),
@@ -310,12 +342,40 @@ export default function CustomerFormPage({
           address: form.address.trim(),
           role: initialCustomer?.role || initialCustomer?.raw?.role || "Admin",
           companyName: form.company_name.trim(),
-          package: form.subscription_plan.label,
+          package: selectedPlanName,
+          subscriptionPlan: selectedPlanName,
           customMembers:
-            form.subscription_plan.label === "Advanced"
+            selectedPlanName === "Advanced"
               ? Number(initialCustomer?.members || initialCustomer?.raw?.customMembers || 1)
               : null,
-        });
+        };
+
+        if (shouldStartPlan) {
+          Object.assign(erpPayload, {
+            subscriptionStartedAt: planDates.startDate.toISOString(),
+            subscriptionStartDate: planDates.startDate.toISOString(),
+            subscriptionEndDate: planDates.endDate.toISOString(),
+            trialStartDate: planDates.startDateOnly,
+            trialEndDate: planDates.endDateOnly,
+            renewalDate: planDates.endDateOnly,
+            subscriptionStatus: "Subscription Active",
+            accountStatus: "ACTIVE",
+            isActive: true,
+          });
+        }
+
+        await axios.put(`${ERP_API_BASE_URL}/superadmin/update-user/${id}`, erpPayload);
+
+        if (shouldStartPlan) {
+          await axios.put(`${ERP_API_BASE_URL}/superadmin/toggle-active/${id}`, {
+            isActive: true,
+          });
+        }
+
+        const crmCustomerId = initialCustomer?.crm_customer_id || initialCustomer?.crmCustomerId || initialCustomer?.raw?.crmCustomerId;
+        if (crmCustomerId) {
+          await axios.put(`${API_BASE_URL}/api/customers/${crmCustomerId}`, payload);
+        }
       } else if (isNew) {
         await axios.post(`${API_BASE_URL}/api/customers`, payload);
       } else {

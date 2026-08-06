@@ -54,6 +54,31 @@ const toErpPayload = (body) => ({
 const isErpCustomerId = (id) => String(id || "").startsWith("ERP-CUST-");
 const isNumericCrmId = (id) => /^\d+$/.test(String(id || "").trim());
 
+const addDays = (date, days) => {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+};
+
+const getPlanDurationDays = (planName) => {
+  const key = normalizePlanKey(planName);
+  return key === "free trial" || key === "trial" || key === "trail" ? 7 : 30;
+};
+
+const getPlanPrice = async (db, planName) => {
+  const planKey = normalizePlanKey(planName);
+  const result = await db.query(
+    `SELECT price
+     FROM plans
+     WHERE LOWER(TRIM(name)) = $1
+        OR LOWER(TRIM(name)) = $2
+     ORDER BY created_at ASC
+     LIMIT 1`,
+    [planKey, normalizePlanKey(planKey)]
+  );
+  return Number(result.rows[0]?.price || 0);
+};
+
 const getLocalCustomerById = async (id) => {
   if (!isNumericCrmId(id)) return null;
   const result = await pool.query(
@@ -105,25 +130,73 @@ const updateLocalCustomer = async (id, body) => {
     throw error;
   }
 
-  await pool.query(
-    `UPDATE customers
-     SET customer_name = $1,
-         company_name = $2,
-         phone = $3,
-         email = $4,
-         subscription_plan = $5,
-         notes = $6
-     WHERE id = $7`,
-    [
-      values.customer_name,
-      values.company_name,
-      values.phone,
-      values.email,
-      values.subscription_plan,
-      values.notes || null,
-      id,
-    ]
-  );
+  const planChanged = normalizePlanKey(existing.subscription_plan) !== normalizePlanKey(values.subscription_plan);
+  const shouldStartPlan = planChanged || !existing.active;
+  const startDate = new Date();
+  const endDate = addDays(startDate, getPlanDurationDays(values.subscription_plan));
+  const planPrice = shouldStartPlan ? await getPlanPrice(pool, values.subscription_plan) : existing.subscription_amount;
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    await client.query(
+      `UPDATE customers
+       SET customer_name = $1,
+           company_name = $2,
+           phone = $3,
+           email = $4,
+           subscription_plan = $5,
+           subscription_amount = $6,
+           start_date = CASE WHEN $8::boolean THEN $9::date ELSE start_date END,
+           renewal_date = CASE WHEN $8::boolean THEN $10::date ELSE renewal_date END,
+           subscription_start_date = CASE WHEN $8::boolean THEN $11::timestamptz ELSE subscription_start_date END,
+           subscription_end_date = CASE WHEN $8::boolean THEN $12::timestamptz ELSE subscription_end_date END,
+           payment_status = CASE WHEN $8::boolean THEN 'Subscription Active' ELSE payment_status END,
+           subscription_status = CASE WHEN $8::boolean THEN 'Subscription Active' ELSE subscription_status END,
+           notes = $7
+       WHERE id = $13`,
+      [
+        values.customer_name,
+        values.company_name,
+        values.phone,
+        values.email,
+        values.subscription_plan,
+        planPrice,
+        values.notes || null,
+        shouldStartPlan,
+        formatDate(startDate),
+        formatDate(endDate),
+        startDate,
+        endDate,
+        id,
+      ]
+    );
+
+    if (shouldStartPlan) {
+      await client.query(
+        `INSERT INTO subscription_history
+         (customer_id, customer_name, plan_name, amount, action_type, start_date, end_date)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [
+          id,
+          values.customer_name,
+          values.subscription_plan,
+          planPrice,
+          planChanged ? "PLAN_UPDATED" : "REACTIVATED",
+          formatDate(startDate),
+          formatDate(endDate),
+        ]
+      );
+    }
+
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 
   return getLocalCustomerById(id);
 };

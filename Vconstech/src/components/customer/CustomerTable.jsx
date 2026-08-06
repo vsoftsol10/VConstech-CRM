@@ -201,6 +201,8 @@ const handleRowsPerPageChange = (e) => {
       Active
     </th>
 
+  
+
     <th className="sticky top-0 z-[5] bg-[#f0f0ee] px-6 py-4 text-start text-[13px] font-semibold text-[#111111]">
       Action
     </th>
@@ -259,6 +261,8 @@ const handleRowsPerPageChange = (e) => {
                         <Toggle active={c.active} onToggle={() => handleToggle(c)} />
                       </div>
                     </td>
+
+                  
 
                     <td className="px-6 py-4">
                       <div className="flex justify-center">

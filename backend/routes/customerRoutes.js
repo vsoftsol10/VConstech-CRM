@@ -7,6 +7,7 @@ router.post("/", customerController.createCustomer);
 router.get("/", customerController.getAllCustomers);
 router.get("/converted-leads", customerController.getConvertedLeadCustomers);
 
+router.post("/subscription-history/erp-sync", subscriptionController.syncErpSubscriptionHistory);
 router.get("/subscription-history/:customerId", subscriptionController.getSubscriptionHistory);
 router.get("/stats/monthly", subscriptionController.getCustomerStats);
 

@@ -29,6 +29,31 @@ const withTransaction = async (handler) => {
   }
 };
 
+const createLeadUpdateEntry = async (
+  db,
+  { leadId, stage, note, followUpDate = null, followUpTime = null, reminder = false }
+) => {
+  const table = await db.query("SELECT to_regclass('public.lead_updates') AS name");
+  if (!table.rows[0]?.name) return null;
+
+  const result = await db.query(
+    `INSERT INTO lead_updates
+     (lead_id, stage, note, follow_up_date, follow_up_time, reminder)
+     VALUES ($1,$2,$3,$4,$5,$6)
+     RETURNING *`,
+    [
+      leadId,
+      stage || null,
+      note || null,
+      followUpDate || null,
+      followUpTime || null,
+      Boolean(reminder),
+    ]
+  );
+
+  return result.rows[0] || null;
+};
+
 const createLeadWorkHistory = async (req, res) => {
   try {
     const { leadId, stage, note, followUpDate, followUpTime, reminder } = req.body;
@@ -144,4 +169,5 @@ module.exports = {
   getLeadWorkHistory,
   createLeadUpdate,
   getLeadUpdates,
+  createLeadUpdateEntry,
 };

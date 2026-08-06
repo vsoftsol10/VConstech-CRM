@@ -207,7 +207,18 @@ const insertWorkHistory = async (
 
 const saveReminderUpdate = async (
   db,
-  { leadId, stage, note, followUpDate, followUpTime, reminder, createdBy, insertGeneralHistory = true }
+  {
+    leadId,
+    stage,
+    note,
+    followUpDate,
+    followUpTime,
+    reminder,
+    createdBy,
+    insertGeneralHistory = true,
+    activityType = "Work Update",
+    title = "Lead Work Update",
+  }
 ) => {
   const reminderInput = validateReminderInput({ followUpDate, followUpTime, reminder });
   if (reminderInput.error) {
@@ -239,8 +250,8 @@ const saveReminderUpdate = async (
       note,
       reminderInput,
       createdBy,
-      activityType: "Work Update",
-      title: "Lead Work Update",
+      activityType,
+      title,
     });
   }
 
@@ -254,8 +265,44 @@ const saveReminderUpdate = async (
   };
 };
 
+const createWorkHistoryEntry = async (
+  db,
+  {
+    leadId,
+    stage,
+    note,
+    followUpDate,
+    followUpTime,
+    reminder,
+    createdBy,
+    activityType = "Work Update",
+    title = "Lead Work Update",
+  }
+) => {
+  const reminderInput = validateReminderInput(
+    { followUpDate, followUpTime, reminder },
+    { requireWhenEnabled: false }
+  );
+  if (reminderInput.error) {
+    const error = new Error(reminderInput.error);
+    error.status = reminderInput.status;
+    throw error;
+  }
+
+  return insertWorkHistory(db, {
+    leadId,
+    stage,
+    note,
+    reminderInput,
+    createdBy,
+    activityType,
+    title,
+  });
+};
+
 module.exports = {
   REMINDER_REFERENCE_TYPE,
+  createWorkHistoryEntry,
   formatReminderTime,
   getReminderFields,
   hasReminderPayload,

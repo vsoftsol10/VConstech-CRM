@@ -79,7 +79,10 @@ const InvitationRegistration = () => {
 
     const registerData = await registerResponse.json();
     if (!registerResponse.ok || !registerData.success) {
-      throw new Error(registerData.error || "Registration failed.");
+      const validationMessage = registerData.errors
+        ? Object.values(registerData.errors).filter(Boolean).join(". ")
+        : "";
+      throw new Error(validationMessage || registerData.error || "Registration failed.");
     }
 
     const trialResponse = await fetch(`${ERP_API_URL}/subscription-sync/invitations/${encodeURIComponent(invitationId)}/start-trial`, {
@@ -137,4 +140,3 @@ const InvitationRegistration = () => {
 };
 
 export default InvitationRegistration;
-

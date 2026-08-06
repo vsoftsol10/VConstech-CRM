@@ -60,7 +60,7 @@ export const validateRegistrationForm = (userData) => {
   };
 
   if (!userData.password) errors.password = "Password is required";
-  else if (userData.password.length < 6) errors.password = "Password must be at least 6 characters";
+  else if (userData.password.length < 8) errors.password = "Password must be at least 8 characters";
   else if (userData.password.length > 50) errors.password = "Password must be less than 50 characters";
   if (!userData.confirmPassword) errors.confirmPassword = "Please confirm your password";
   else if (userData.password !== userData.confirmPassword) errors.confirmPassword = "Passwords do not match";

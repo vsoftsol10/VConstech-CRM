@@ -33,6 +33,221 @@ const sendIntegrationFailure = (res, { customer, error }) =>
     },
   });
 
+const resolveCrmCustomerId = async (customerId) => {
+  const rawId = String(customerId || "").trim();
+  if (!rawId) return null;
+  if (/^\d+$/.test(rawId)) return rawId;
+
+  try {
+    const directCustomer = await pool.query(
+      `SELECT id
+       FROM customers
+       WHERE erp_customer_id = $1
+       LIMIT 1`,
+      [rawId]
+    );
+    if (directCustomer.rows[0]?.id) return directCustomer.rows[0].id;
+  } catch (err) {
+    console.error("Failed to resolve subscription history customer:", err.message);
+  }
+
+  try {
+    const mappedCustomer = await pool.query(
+      `SELECT customer_id
+       FROM crm_erp_customer_mappings
+       WHERE erp_customer_id = $1
+       LIMIT 1`,
+      [rawId]
+    );
+    return mappedCustomer.rows[0]?.customer_id || null;
+  } catch (err) {
+    console.error("Failed to resolve mapped subscription history customer:", err.message);
+    return null;
+  }
+};
+
+const parseDateOrToday = (value) => {
+  if (!value) return new Date();
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+};
+
+const normalizePhone = (value) => String(value || "").replace(/\D/g, "");
+
+const getPlanAmount = async (planName, fallbackAmount = 0) => {
+  const amount = Number(fallbackAmount);
+  if (Number.isFinite(amount) && amount > 0) return amount;
+
+  const result = await pool.query(
+    `SELECT price
+     FROM plans
+     WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))
+     ORDER BY created_at ASC
+     LIMIT 1`,
+    [planName || ""]
+  );
+  return Number(result.rows[0]?.price || 0);
+};
+
+const upsertErpCustomerForHistory = async ({
+  crmCustomerId,
+  erpCustomerId,
+  customerName,
+  companyName,
+  phone,
+  email,
+  planName,
+  amount,
+  startDate,
+  endDate,
+}) => {
+  const normalizedPhone = normalizePhone(phone);
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+
+  const existing = await pool.query(
+    `SELECT *
+     FROM customers
+     WHERE ($1::int IS NOT NULL AND id = $1::int)
+        OR ($2::text IS NOT NULL AND erp_customer_id = $2::text)
+        OR ($3::text <> '' AND LOWER(email) = $3::text)
+        OR ($4::text <> '' AND regexp_replace(phone, '\\D', '', 'g') = $4::text)
+     ORDER BY id ASC
+     LIMIT 1`,
+    [
+      /^\d+$/.test(String(crmCustomerId || "")) ? Number(crmCustomerId) : null,
+      erpCustomerId || null,
+      normalizedEmail,
+      normalizedPhone,
+    ]
+  );
+
+  const values = [
+    erpCustomerId || null,
+    customerName || "ERP Customer",
+    companyName || "",
+    normalizedPhone,
+    normalizedEmail,
+    planName,
+    amount,
+    formatDate(startDate),
+    formatDate(endDate),
+    startDate,
+    endDate,
+  ];
+
+  if (existing.rows[0]) {
+    const result = await pool.query(
+      `UPDATE customers
+       SET erp_customer_id = COALESCE($1, erp_customer_id),
+           customer_name = COALESCE(NULLIF($2, ''), customer_name),
+           company_name = COALESCE(NULLIF($3, ''), company_name),
+           phone = COALESCE(NULLIF($4, ''), phone),
+           email = COALESCE(NULLIF($5, ''), email),
+           subscription_plan = $6,
+           subscription_amount = $7,
+           start_date = $8::date,
+           renewal_date = $9::date,
+           subscription_start_date = $10::timestamptz,
+           subscription_end_date = $11::timestamptz,
+           payment_status = 'Subscription Active',
+           subscription_status = 'Subscription Active'
+       WHERE id = $12
+       RETURNING *`,
+      [...values, existing.rows[0].id]
+    );
+    return result.rows[0];
+  }
+
+  const result = await pool.query(
+    `INSERT INTO customers
+     (erp_customer_id, customer_name, company_name, phone, email,
+      subscription_plan, subscription_amount,
+      start_date, renewal_date, subscription_start_date, subscription_end_date,
+      payment_status, subscription_status, channel)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Subscription Active','Subscription Active','ERP')
+     RETURNING *`,
+    values
+  );
+  return result.rows[0];
+};
+
+const syncErpSubscriptionHistory = async (req, res) => {
+  try {
+    const {
+      crmCustomerId,
+      erpCustomerId,
+      customerName,
+      companyName,
+      phone,
+      email,
+      planName,
+      amount,
+      actionType = "PLAN_UPDATED",
+    } = req.body || {};
+
+    if (!erpCustomerId && !crmCustomerId) {
+      return res.status(400).json({
+        success: false,
+        message: "ERP customer id or CRM customer id is required",
+      });
+    }
+    if (!planName) {
+      return res.status(400).json({
+        success: false,
+        message: "Plan name is required",
+      });
+    }
+
+    const startDate = parseDateOrToday(
+      req.body.startDate || req.body.subscriptionStartedAt || req.body.trialStartDate
+    );
+    const endDate = parseDateOrToday(
+      req.body.endDate || req.body.renewalDate || req.body.trialEndDate
+    );
+    const planAmount = await getPlanAmount(planName, amount);
+    const customer = await upsertErpCustomerForHistory({
+      crmCustomerId,
+      erpCustomerId,
+      customerName,
+      companyName,
+      phone,
+      email,
+      planName,
+      amount: planAmount,
+      startDate,
+      endDate,
+    });
+
+    const history = await pool.query(
+      `INSERT INTO subscription_history
+       (customer_id, customer_name, plan_name, amount, action_type, start_date, end_date)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       RETURNING *`,
+      [
+        customer.id,
+        customer.customer_name,
+        planName,
+        planAmount,
+        actionType,
+        formatDate(startDate),
+        formatDate(endDate),
+      ]
+    );
+
+    res.json({
+      success: true,
+      customer,
+      history: history.rows[0],
+    });
+  } catch (err) {
+    console.error("ERP subscription history sync failed:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
 // ── POST convert lead to customer ───────────────────────────────────────────
 const convertLeadToCustomer = async (req, res) => {
   const client = await pool.connect();
@@ -171,7 +386,9 @@ const convertLeadToCustomer = async (req, res) => {
 const getSubscriptionHistory = async (req, res) => {
   try {
     const { customerId } = req.params;
-    if (String(customerId || "").startsWith("ERP-CUST-")) {
+    const crmCustomerId = await resolveCrmCustomerId(customerId);
+
+    if (!crmCustomerId) {
       return res.json([]);
     }
 
@@ -180,7 +397,7 @@ const getSubscriptionHistory = async (req, res) => {
        FROM subscription_history
        WHERE customer_id = $1
        ORDER BY created_at DESC`,
-      [customerId]
+      [crmCustomerId]
     );
 
     res.json(result.rows);
@@ -258,4 +475,5 @@ module.exports = {
   convertLeadToCustomer,
   getSubscriptionHistory,
   getCustomerStats,
+  syncErpSubscriptionHistory,
 };

@@ -164,7 +164,9 @@
 
 
 const pool = require("../config/database");
-const { getReminderFields, hasReminderPayload, saveReminderUpdate } = require("../services/reminderService");
+const { createWorkHistoryEntry, getReminderFields } = require("../services/reminderService");
+const { createLeadUpdateEntry } = require("./leadWorkHistoryController");
+const { createNotification } = require("../utils/notifications");
 
 const getActor = (req) => req.user?.employee_id || req.user?.id || null;
 
@@ -180,6 +182,24 @@ const normalizeText = (value) => String(value || "").trim();
 const normalizeEmail = (value) => normalizeText(value).toLowerCase();
 const normalizePhone = (value) => normalizeText(value).replace(/\D/g, "");
 const todayInput = () => new Date().toISOString().split("T")[0];
+const normalizeStatus = (value) => normalizeText(value).toLowerCase().replace(/\s+/g, " ");
+
+const ACTIVE_DUPLICATE_STATUSES = new Set([
+  "new",
+  "open",
+  "contacted",
+  "in progress",
+  "follow up",
+  "demo scheduled",
+]);
+
+const REOPEN_AS_NEW_LEAD_STATUSES = new Set(["won", "converted", "closed"]);
+const OPTIONAL_DUPLICATE_TIMESTAMP_COLUMNS = ["updated_at", "last_contacted_at", "last_demo_requested_at"];
+const OPTIONAL_PREVIOUS_LEAD_COLUMNS = ["previous_lead_id", "parent_lead_id", "source_lead_id", "related_lead_id"];
+const WORK_HISTORY_TITLE = "Website Demo Requested Again";
+const WORK_HISTORY_NOTE_PREFIX = "Customer submitted another demo request from the Vconstech website.";
+const LEAD_UPDATE_NOTE = "Customer requested another demo.";
+let leadsColumnCache = null;
 
 const validateLeadPayload = (body) => {
   const values = {
@@ -223,14 +243,207 @@ const sendValidationError = (res, errors) =>
 
 const findLeadDuplicate = async ({ email, phone, excludeId = null }) => {
   const params = [email, phone];
-  let query = "SELECT id, email, phone FROM leads WHERE (LOWER(email) = $1 OR regexp_replace(phone, '\\D', '', 'g') = $2)";
+  let query = `
+    SELECT
+      l.*,
+      l.follow_up_date::text AS follow_up_date_text,
+      l.follow_up_time::text AS follow_up_time_text,
+      EXISTS (SELECT 1 FROM customers c WHERE c.lead_id = l.id) AS has_customer
+    FROM leads l
+    WHERE (LOWER(l.email) = $1 OR regexp_replace(l.phone, '\\D', '', 'g') = $2)
+  `;
   if (excludeId) {
     params.push(excludeId);
-    query += " AND id <> $3";
+    query += " AND l.id <> $3";
   }
-  query += " LIMIT 1";
+  query += " ORDER BY l.created_at DESC NULLS LAST, l.id DESC LIMIT 1";
   const result = await pool.query(query, params);
   return result.rows[0] || null;
+};
+
+const getLeadsColumns = async (db) => {
+  if (leadsColumnCache) return leadsColumnCache;
+
+  const result = await db.query(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'leads'`
+  );
+  leadsColumnCache = new Set(result.rows.map((row) => row.column_name));
+  return leadsColumnCache;
+};
+
+const buildDuplicateWorkNote = ({ channel, requirements }) => {
+  const submittedAt = new Date();
+  const lines = [
+    WORK_HISTORY_NOTE_PREFIX,
+    "",
+    `Date: ${submittedAt.toISOString().split("T")[0]}`,
+    `Time: ${submittedAt.toTimeString().slice(0, 8)}`,
+    `Channel: ${channel || "Website"}`,
+  ];
+
+  if (requirements) {
+    lines.push(`Requirements: ${requirements}`);
+  }
+
+  return lines.join("\n");
+};
+
+const insertLead = async (db, values, reminderFields, options = {}) => {
+  const columns = [
+    "full_name",
+    "company",
+    "channel",
+    "status",
+    "phone",
+    "email",
+    "lead_date",
+    "plan",
+    "requirements",
+    "assigned_to",
+    "address",
+    "location",
+    "follow_up_date",
+    "follow_up_time",
+    "reminder_enabled",
+  ];
+  const params = [
+    values.fullName,
+    values.company,
+    values.channel,
+    values.status,
+    values.phone,
+    values.email,
+    values.date || null,
+    values.plan,
+    values.requirements || null,
+    values.assignedTo,
+    values.address || null,
+    values.location || null,
+    reminderFields.followUpDate || null,
+    reminderFields.followUpTime || null,
+    reminderFields.reminderEnabled,
+  ];
+
+  if (options.previousLeadId) {
+    const leadColumns = await getLeadsColumns(db);
+    const relationshipColumn = OPTIONAL_PREVIOUS_LEAD_COLUMNS.find((column) => leadColumns.has(column));
+    if (relationshipColumn) {
+      columns.push(relationshipColumn);
+      params.push(options.previousLeadId);
+    }
+  }
+
+  const placeholders = params.map((_, index) => `$${index + 1}`).join(",");
+  const result = await db.query(
+    `INSERT INTO leads
+     (${columns.join(", ")})
+     VALUES (${placeholders})
+     RETURNING *`,
+    params
+  );
+
+  return result.rows[0];
+};
+
+const updateDuplicateTimestamps = async (db, leadId) => {
+  const columns = await getLeadsColumns(db);
+  const timestampColumns = OPTIONAL_DUPLICATE_TIMESTAMP_COLUMNS.filter((column) => columns.has(column));
+  if (!timestampColumns.length) return null;
+
+  const assignments = timestampColumns.map((column) => `${column} = NOW()`).join(", ");
+  const result = await db.query(
+    `UPDATE leads
+     SET ${assignments}
+     WHERE id = $1
+     RETURNING *`,
+    [leadId]
+  );
+
+  return result.rows[0] || null;
+};
+
+const handleActiveDuplicateLead = async ({ duplicate, values, req }) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const lockedResult = await client.query(
+      `SELECT
+         l.*,
+         l.follow_up_date::text AS follow_up_date_text,
+         l.follow_up_time::text AS follow_up_time_text,
+         EXISTS (SELECT 1 FROM customers c WHERE c.lead_id = l.id) AS has_customer
+       FROM leads l
+       WHERE l.id = $1
+       FOR UPDATE`,
+      [duplicate.id]
+    );
+    const lead = lockedResult.rows[0];
+
+    if (!lead) {
+      const error = new Error("Lead not found while updating duplicate request.");
+      error.status = 404;
+      throw error;
+    }
+
+    const note = buildDuplicateWorkNote(values);
+    const reminderEnabled = Boolean(
+      lead.reminder_enabled && lead.follow_up_date_text && lead.follow_up_time_text
+    );
+    const history = await createWorkHistoryEntry(client, {
+      leadId: lead.id,
+      stage: lead.status,
+      note,
+      followUpDate: lead.follow_up_date_text,
+      followUpTime: lead.follow_up_time_text,
+      reminder: reminderEnabled,
+      createdBy: getActor(req),
+      insertGeneralHistory: true,
+      activityType: "Website Demo Request",
+      title: WORK_HISTORY_TITLE,
+    });
+
+    const leadUpdate = await createLeadUpdateEntry(client, {
+      leadId: lead.id,
+      stage: lead.status,
+      note: LEAD_UPDATE_NOTE,
+      followUpDate: lead.follow_up_date_text,
+      followUpTime: lead.follow_up_time_text,
+      reminder: reminderEnabled,
+    });
+
+    const updatedLead = (await updateDuplicateTimestamps(client, lead.id)) || lead;
+
+    await client.query("COMMIT");
+
+    let notification = null;
+    if (lead.assigned_to) {
+      notification = await createNotification({
+        teamMemberId: lead.assigned_to,
+        title: `${lead.full_name || values.fullName || "Customer"} requested another website demo.`,
+        message: `${lead.full_name || values.fullName || "Customer"} requested another website demo.`,
+        type: "lead_duplicate_demo_request",
+        relatedType: "lead",
+        relatedId: String(lead.id),
+        link: `/leads/${lead.id}`,
+      });
+    }
+
+    return { lead: updatedLead, history, leadUpdate, notification };
+  } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackErr) {
+      console.error("Duplicate lead transaction rollback failed:", rollbackErr.message);
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
 };
 
 // ── POST create lead ────────────────────────────────────────────────────────
@@ -241,39 +454,43 @@ const createLead = async (req, res) => {
     const { followUpDate, followUpTime, reminderEnabled } = getReminderFields(req.body);
 
     const duplicate = await findLeadDuplicate(values);
+    let createStatus = 201;
+    let previousLeadId = null;
     if (duplicate) {
-      return res.status(409).json({
-        emailExists: normalizeEmail(duplicate.email) === values.email,
-        phoneExists: normalizePhone(duplicate.phone) === values.phone,
-      });
+      const duplicateStatus = normalizeStatus(duplicate.status);
+      const shouldCreateNewLead =
+        REOPEN_AS_NEW_LEAD_STATUSES.has(duplicateStatus) || duplicate.has_customer === true;
+
+      if (!shouldCreateNewLead && ACTIVE_DUPLICATE_STATUSES.has(duplicateStatus)) {
+        await handleActiveDuplicateLead({ duplicate, values, req });
+
+        return res.status(200).json({
+          success: true,
+          duplicate: true,
+          leadId: duplicate.id,
+          message: "Existing lead updated successfully.",
+        });
+      }
+
+      if (!shouldCreateNewLead) {
+        return res.status(409).json({
+          emailExists: normalizeEmail(duplicate.email) === values.email,
+          phoneExists: normalizePhone(duplicate.phone) === values.phone,
+        });
+      }
+
+      createStatus = 200;
+      previousLeadId = duplicate.id;
     }
 
-    const result = await pool.query(
-      `INSERT INTO leads
-       (full_name, company, channel, status, phone, email, lead_date, plan, requirements, assigned_to,
-        address, location, follow_up_date, follow_up_time, reminder_enabled)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-       RETURNING *`,
-      [
-        values.fullName,
-        values.company,
-        values.channel,
-        values.status,
-        values.phone,
-        values.email,
-        values.date || null,
-        values.plan,
-        values.requirements || null,
-        values.assignedTo,
-        values.address || null,
-        values.location || null,
-        followUpDate || null,
-        followUpTime || null,
-        reminderEnabled,
-      ]
+    const lead = await insertLead(
+      pool,
+      values,
+      { followUpDate, followUpTime, reminderEnabled },
+      { previousLeadId }
     );
 
-    res.status(201).json({ success: true, lead: result.rows[0] });
+    res.status(createStatus).json({ success: true, lead });
   } catch (err) {
     console.log(err.message);
     res.status(500).json({ success: false, message: err.message });

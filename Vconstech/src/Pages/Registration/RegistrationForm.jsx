@@ -47,7 +47,8 @@ const RegistrationForm = ({ initialData, onSubmit, onSuccess }) => {
     setFieldErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (event) => {
+    event?.preventDefault();
     setError("");
     const errors = validateRegistrationForm(userData);
     if (Object.keys(errors).length > 0) {
@@ -74,7 +75,7 @@ const RegistrationForm = ({ initialData, onSubmit, onSuccess }) => {
 
   return (
     <>
-      <div className="relative bg-white rounded-3xl shadow-xl border border-gray-200/80 w-full max-w-5xl flex flex-col overflow-hidden">
+      <form onSubmit={handleSubmit} className="relative bg-white rounded-3xl shadow-xl border border-gray-200/80 w-full max-w-5xl flex flex-col overflow-hidden">
         <div className="relative flex items-center justify-between px-5 sm:px-8 py-5 sm:py-8 border-b border-gray-100 bg-white rounded-t-3xl shrink-0 overflow-hidden">
           <div className="flex items-center gap-3 sm:gap-4">
             <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-[#fff4d7] flex items-center justify-center shadow-sm">
@@ -238,7 +239,7 @@ const RegistrationForm = ({ initialData, onSubmit, onSuccess }) => {
               field="password"
               label="Password"
               type={showPassword ? "text" : "password"}
-              placeholder="Min 6 characters"
+              placeholder="Min 8 characters"
               icon={Lock}
               value={userData.password}
               isFocused={isFocused.password}
@@ -303,8 +304,7 @@ const RegistrationForm = ({ initialData, onSubmit, onSuccess }) => {
 
         <div className="flex flex-col gap-4 px-5 sm:px-8 py-5 sm:py-6 border-t border-gray-100 bg-white rounded-b-3xl shrink-0">
           <button
-            type="button"
-            onClick={handleSubmit}
+            type="submit"
             disabled={loading}
             className="flex-1 flex items-center justify-center gap-3 bg-[#ffbe2a] text-black font-bold py-3.5 sm:py-4 rounded-xl hover:shadow-xl shadow-[#ffbe2a]/30 transition-all transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed text-base sm:text-lg"
           >
@@ -316,7 +316,7 @@ const RegistrationForm = ({ initialData, onSubmit, onSuccess }) => {
             Your data is safe and secure with us.
           </p>
         </div>
-      </div>
+      </form>
 
       {toast && <Toast message={toast} onClose={() => setToast("")} />}
     </>

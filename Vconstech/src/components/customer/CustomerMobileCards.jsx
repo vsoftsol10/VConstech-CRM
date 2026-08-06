@@ -75,6 +75,19 @@ export default function CustomerMobileCards({
             </div>
 
             {/* Row 3 — Date + Members + Toggle */}
+            <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
+              <div>
+                <div className="text-gray-400">Price</div>
+                <div className="font-medium text-gray-700">
+                  {c.subscription_amount !== "" && c.subscription_amount != null ? `₹${c.subscription_amount}` : "-"}
+                </div>
+              </div>
+              <div>
+                <div className="text-gray-400">Expiry</div>
+                <div className="font-medium text-gray-700">{c.renewal_date || "-"}</div>
+              </div>
+            </div>
+
             <div className="flex justify-between items-center">
               <span className="text-xs text-gray-400">{c.start_date || "-"}</span>
               <div className="flex items-center gap-3">

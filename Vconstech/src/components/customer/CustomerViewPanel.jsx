@@ -33,6 +33,17 @@ function Row({ label, value }) {
   );
 }
 
+function getHistoryCustomerId(customer) {
+  const crmId = customer?.crm_customer_id || customer?.crmCustomerId;
+  if (crmId) return crmId;
+
+  const erpId = String(customer?.erp_customer_id || customer?.erpCustomerId || "");
+  if (erpId.startsWith("ERP-CUST-")) return erpId;
+
+  const id = String(customer?.id || "");
+  return /^\d+$/.test(id) || id.startsWith("ERP-CUST-") ? id : null;
+}
+
 export default function CustomerViewPanel({ customer, onClose, onEdit }) {
   const navigate = useNavigate();
   const [subscriptionHistory, setSubscriptionHistory] = useState([]);
@@ -40,15 +51,18 @@ export default function CustomerViewPanel({ customer, onClose, onEdit }) {
 
   useEffect(() => {
     if (!customer?.id) return;
-    if (customer?.source === "erp") {
+    const historyCustomerId = getHistoryCustomerId(customer);
+    if (!historyCustomerId) {
       setSubscriptionHistory([]);
+      setHistoryLoading(false);
       return;
     }
+
     const loadHistory = async () => {
       try {
         setHistoryLoading(true);
         const res = await axios.get(
-          `${API_BASE_URL}/api/customers/subscription-history/${customer.id}`
+          `${API_BASE_URL}/api/customers/subscription-history/${historyCustomerId}`
         );
         setSubscriptionHistory(Array.isArray(res.data) ? res.data : []);
       } catch (err) {
@@ -59,7 +73,7 @@ export default function CustomerViewPanel({ customer, onClose, onEdit }) {
       }
     };
     loadHistory();
-  }, [customer?.id]);
+  }, [customer?.id, customer?.crm_customer_id, customer?.crmCustomerId]);
 
   if (!customer) return null;
 

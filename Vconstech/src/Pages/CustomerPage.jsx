@@ -38,9 +38,88 @@ function formatPlanLabel(plan) {
 }
 
 // ── Active logic: true only when renewal_date is today or future ──────────────
-function csvEscape(value) {
-  const text = value == null ? "" : String(value);
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+function formatExportValue(value) {
+  if (value == null || value === "") return "-";
+  if (typeof value === "boolean") return value ? "Active" : "Inactive";
+  return String(value);
+}
+
+function formatExportDate(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).split("T")[0] || "-";
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function pickFirst(...values) {
+  return values.find((value) => value !== undefined && value !== null && value !== "");
+}
+
+function parseCustomerDate(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) return parsed;
+
+  const match = String(value).trim().match(/^(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{4})$/);
+  if (!match) return null;
+
+  const month = new Date(`${match[2]} 1, ${match[3]}`).getMonth();
+  if (Number.isNaN(month)) return null;
+  return new Date(Number(match[3]), month, Number(match[1]));
+}
+
+function isActiveByExpiry(customer, renewalDate) {
+  const expiry = parseCustomerDate(renewalDate);
+  const status = String(
+    pickFirst(customer.subscription_status, customer.subscriptionStatus, customer.payment_status, customer.paymentStatus, customer.accountStatus, customer.status, "")
+  ).toLowerCase();
+
+  if (expiry) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    expiry.setHours(0, 0, 0, 0);
+    return expiry >= today && !/(expired|inactive|cancelled|canceled)/.test(status);
+  }
+
+  if (/(expired|inactive|cancelled|canceled)/.test(status)) return false;
+  if (/(active|paid)/.test(status)) return true;
+  return Boolean(customer.active ?? customer.isActive);
+}
+
+function getHistoryCustomerId(customer) {
+  const crmId = pickFirst(customer.crm_customer_id, customer.crmCustomerId);
+  if (crmId) return crmId;
+
+  const erpId = String(pickFirst(customer.erp_customer_id, customer.erpCustomerId, ""));
+  if (erpId.startsWith("ERP-CUST-")) return erpId;
+
+  const id = String(customer.id || "");
+  return /^\d+$/.test(id) || id.startsWith("ERP-CUST-") ? id : null;
+}
+
+function getCustomerSortTime(customer) {
+  const date = parseCustomerDate(
+    pickFirst(
+      customer.created_at,
+      customer.createdAt,
+      customer.start_date,
+      customer.startDate,
+      customer.subscription_start_date,
+      customer.subscriptionStartedAt,
+      customer.trialStartDate
+    )
+  );
+  return date ? date.getTime() : 0;
+}
+
+function getCustomerSortId(customer) {
+  const idText = String(pickFirst(customer.id, customer.erp_customer_id, customer.erpCustomerId, "")).trim();
+  const numbers = idText.match(/\d+/g);
+  return numbers ? Number(numbers[numbers.length - 1]) : 0;
 }
 
 export default function CustomerPage() {
@@ -72,32 +151,71 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
     try {
       const res = await axios.get(`${ERP_API_BASE_URL}/superadmin/users`);
 
-      const normalized = unwrapCustomerList(res.data).map((c) => ({
+      const normalized = unwrapCustomerList(res.data).map((c) => {
+        const plan = pickFirst(c.subscription_plan, c.subscriptionPlan, c.plan, c.package);
+        const renewalDate = pickFirst(
+          c.renewal_date,
+          c.renewalDate,
+          c.subscription_end_date,
+          c.subscriptionEndDate,
+          c.trialEndDate,
+          c.expire,
+          c.expires_at
+        );
+        const startDate = pickFirst(
+          c.start_date,
+          c.startDate,
+          c.subscription_start_date,
+          c.subscriptionStartedAt,
+          c.subscriptionStartDate,
+          c.trialStartDate,
+          c.createdAt
+        );
+        const amount = pickFirst(
+          c.subscription_amount,
+          c.subscriptionAmount,
+          c.plan_price,
+          c.planPrice,
+          c.packagePrice,
+          c.price,
+          c.amount
+        );
+
+        return {
         id:           c.id,
         source:       "erp",
-        raw:          c,
-        erp_customer_id: c.erp_customer_id,
-        erp_client_id: c.erp_client_id || c.companyId,
-        name:         c.customer_name || c.name || "",
-        customer_name: c.customer_name || c.name || "",
-        email:        c.email         || "",
-        phone:        c.phone         || c.phoneNumber || "",
-        company:      c.company_name  || c.company?.name || "",
-        company_name: c.company_name  || c.company?.name || "",
-        plan:         formatPlanLabel(c.subscription_plan || c.package),
-        subscription_plan: formatPlanLabel(c.subscription_plan || c.package),
-        planColor:    getPlanColor(c.subscription_plan || c.package),
-        start_date:   c.start_date    || c.createdAt || "",
-        renewal_date: c.renewal_date  || "",   // ← carry through for active check
-        active:       Boolean(c.active ?? c.isActive),
+          raw:          c,
+          crm_customer_id: c.crm_customer_id || c.crmCustomerId,
+          erp_customer_id: c.erp_customer_id || c.erpCustomerId,
+        erp_client_id: c.erp_client_id || c.companyId || c.clientId,
+        name:         c.customer_name || c.name || c.userName || "",
+        customer_name: c.customer_name || c.name || c.userName || "",
+        email:        c.email || c.userEmail || c.clientEmail || "",
+        phone:        c.phone || c.phoneNumber || c.clientPhone || "",
+        company:      c.company_name || c.companyName || c.company?.name || "",
+        company_name: c.company_name || c.companyName || c.company?.name || "",
+        plan:         formatPlanLabel(plan),
+        subscription_plan: formatPlanLabel(plan),
+        subscription_amount: amount ?? "",
+          payment_status: pickFirst(c.payment_status, c.paymentStatus, c.subscription_status, c.subscriptionStatus, c.accountStatus),
+          planColor:    getPlanColor(plan),
+          start_date:   startDate || "",
+          created_at:   pickFirst(c.created_at, c.createdAt, c.userCreatedAt, startDate),
+          renewal_date: renewalDate || "",
+          active:       isActiveByExpiry(c, renewalDate),
         members:      c.members ?? c.customMembers ?? "",
-        address:      c.address || "",
+        address:      c.address || c.clientAddress || "",
         location:     c.location || c.city || "",
         city:         c.city || c.location || "",
         role:         c.role || "Admin",
-      }));
+        };
+      });
 
-      setCustomers(normalized);
+      setCustomers(
+        normalized.sort(
+          (a, b) => getCustomerSortTime(b) - getCustomerSortTime(a) || getCustomerSortId(b) - getCustomerSortId(a)
+        )
+      );
     } catch (err) {
       console.error("Failed to load customers:", err);
     }
@@ -216,7 +334,7 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
     handleCloseForm();
   };
 
-const handleExport = () => {
+const handleExport = async () => {
   const exportCustomers =
     selectedCustomers.length > 0
       ? customers.filter((customer) => selectedCustomers.includes(customer.id))
@@ -227,6 +345,7 @@ const handleExport = () => {
     ["Customer Name", "name"],
     ["Company", "company"],
     ["Plan", "plan"],
+    ["Price", "subscription_amount"],
     ["Phone", "phone"],
     ["Email", "email"],
     ["Purchase Date", "start_date"],
@@ -235,27 +354,102 @@ const handleExport = () => {
    
   ];
 
+  if (exportCustomers.length === 0) return;
+
   const doc = new jsPDF({ orientation: "landscape" });
 
   doc.setFontSize(14);
-  doc.text("Customers Report", 14, 15);
+  doc.text(
+    exportCustomers.length === 1 ? "Customer Details Report" : "Customers Report",
+    14,
+    15
+  );
   doc.setFontSize(9);
   doc.setTextColor(150);
   doc.text(`Exported on ${new Date().toLocaleDateString()}`, 14, 22);
 
-  autoTable(doc, {
-    startY: 28,
-    head: [columns.map(([label]) => label)],
-    body: exportCustomers.map((customer) =>
-      columns.map(([, key]) => {
-        if (key === "active") return customer.active ? "Active" : "Inactive";
-        return customer[key] ?? "";
-      })
-    ),
-    headStyles: { fillColor: [245, 197, 24], textColor: 0, fontStyle: "bold" },
-    alternateRowStyles: { fillColor: [250, 250, 250] },
-    styles: { fontSize: 8, cellPadding: 3 },
-  });
+  if (exportCustomers.length === 1) {
+    const customer = exportCustomers[0];
+    let subscriptionHistory = [];
+    const historyCustomerId = getHistoryCustomerId(customer);
+
+    if (historyCustomerId) {
+      try {
+        const res = await axios.get(
+          `${API_BASE_URL}/api/customers/subscription-history/${historyCustomerId}`
+        );
+        subscriptionHistory = Array.isArray(res.data) ? res.data : [];
+      } catch (err) {
+        console.error("Failed to load subscription history for export:", err);
+      }
+    }
+
+    const detailRows = [
+      ["Customer ID", customer.id],
+      ["Customer Name", customer.customer_name || customer.name],
+      ["Company", customer.company_name || customer.company],
+      ["Email", customer.email],
+      ["Phone", customer.phone],
+      ["Plan", customer.subscription_plan || customer.plan],
+      ["Subscription Amount", customer.subscription_amount],
+      ["Payment Status", customer.payment_status],
+      ["Purchase Date", formatExportDate(customer.start_date)],
+      ["Renewal Date", formatExportDate(customer.renewal_date)],
+      ["Active", customer.active],
+      ["Address", customer.address],
+      ["Location", customer.location || customer.city],
+      ["Role", customer.role],
+      ["Notes", customer.notes],
+    ].map(([label, value]) => [label, formatExportValue(value)]);
+
+    autoTable(doc, {
+      startY: 28,
+      head: [["Customer Detail", "Value"]],
+      body: detailRows,
+      headStyles: { fillColor: [245, 197, 24], textColor: 0, fontStyle: "bold" },
+      alternateRowStyles: { fillColor: [250, 250, 250] },
+      styles: { fontSize: 9, cellPadding: 3 },
+      columnStyles: { 0: { fontStyle: "bold", cellWidth: 55 } },
+    });
+
+    const historyStartY = (doc.lastAutoTable?.finalY || 28) + 12;
+    doc.setFontSize(12);
+    doc.setTextColor(0);
+    doc.text("Subscription History", 14, historyStartY);
+
+    autoTable(doc, {
+      startY: historyStartY + 5,
+      head: [["Date", "Action", "Plan", "Amount", "Start Date", "End Date"]],
+      body:
+        subscriptionHistory.length > 0
+          ? subscriptionHistory.map((item) => [
+              formatExportDate(item.created_at),
+              formatExportValue(item.action_type),
+              formatExportValue(item.plan_name),
+              formatExportValue(item.amount),
+              formatExportDate(item.start_date),
+              formatExportDate(item.end_date),
+            ])
+          : [["-", "No subscription history found", "-", "-", "-", "-"]],
+      headStyles: { fillColor: [245, 197, 24], textColor: 0, fontStyle: "bold" },
+      alternateRowStyles: { fillColor: [250, 250, 250] },
+      styles: { fontSize: 8, cellPadding: 3 },
+    });
+  } else {
+    autoTable(doc, {
+      startY: 28,
+      head: [columns.map(([label]) => label)],
+      body: exportCustomers.map((customer) =>
+        columns.map(([, key]) => {
+          if (key === "active") return customer.active ? "Active" : "Inactive";
+          return customer[key] ?? "";
+        })
+      ),
+      headStyles: { fillColor: [245, 197, 24], textColor: 0, fontStyle: "bold" },
+      alternateRowStyles: { fillColor: [250, 250, 250] },
+      styles: { fontSize: 8, cellPadding: 3 },
+    });
+  }
 
   doc.save(`customers-${new Date().toISOString().slice(0, 10)}.pdf`);
   if (selectedCustomers.length > 0) {
