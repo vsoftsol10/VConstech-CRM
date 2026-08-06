@@ -29,6 +29,7 @@ const ACTIVE_DUPLICATE_STATUSES = new Set([
 ]);
 
 const REOPEN_AS_NEW_LEAD_STATUSES = new Set(["won", "converted", "closed"]);
+const ALREADY_CUSTOMER_DUPLICATE_STATUSES = new Set(["won", "converted"]);
 const OPTIONAL_DUPLICATE_TIMESTAMP_COLUMNS = ["updated_at", "last_contacted_at", "last_demo_requested_at"];
 const OPTIONAL_PREVIOUS_LEAD_COLUMNS = ["previous_lead_id", "parent_lead_id", "source_lead_id", "related_lead_id"];
 const WORK_HISTORY_TITLE = "Website Demo Requested Again";
@@ -293,10 +294,24 @@ const createLead = async (req, res) => {
     let previousLeadId = null;
     if (duplicate) {
       const duplicateStatus = normalizeStatus(duplicate.status);
+      const alreadyCustomerDuplicate =
+        duplicate.has_customer === true || ALREADY_CUSTOMER_DUPLICATE_STATUSES.has(duplicateStatus);
+      const isActiveDuplicate = ACTIVE_DUPLICATE_STATUSES.has(duplicateStatus);
       const shouldCreateNewLead =
-        REOPEN_AS_NEW_LEAD_STATUSES.has(duplicateStatus) || duplicate.has_customer === true;
+        !isActiveDuplicate &&
+        !alreadyCustomerDuplicate &&
+        REOPEN_AS_NEW_LEAD_STATUSES.has(duplicateStatus);
 
-      if (!shouldCreateNewLead && ACTIVE_DUPLICATE_STATUSES.has(duplicateStatus)) {
+      if (alreadyCustomerDuplicate) {
+        return res.status(200).json({
+          success: true,
+          alreadyCustomer: true,
+          leadId: duplicate.id,
+          message: "You are already a Vconstech customer.",
+        });
+      }
+
+      if (isActiveDuplicate) {
         await handleActiveDuplicateLead({ duplicate, values, req });
 
         return res.status(200).json({
