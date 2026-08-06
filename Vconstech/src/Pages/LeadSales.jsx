@@ -159,7 +159,7 @@ if (activeStage === "Won") {
       return (matchesCustomerStage || matchesWork) && matchesSearch && matchesStage && matchesPlan;
     }),
   }))
-  .filter((stage) => activeStage === "All" || stage.stage === activeStage);
+  .filter((stage) => (activeStage === "All" ? stage.stage === "All" : stage.stage === activeStage));
   return (
     // ✅ removed overflow-x-hidden (clips modals/dropdowns), added responsive padding
     // <div className="space-y-4 md:space-y-6 p-1">
