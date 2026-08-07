@@ -91,14 +91,17 @@ function isActiveByExpiry(customer, renewalDate) {
 }
 
 function getHistoryCustomerId(customer) {
+  const erpUserId = pickFirst(customer.erp_user_id, customer.erpUserId, customer.raw?.erp_user_id, customer.raw?.id);
+  if (erpUserId) return erpUserId;
+
   const crmId = pickFirst(customer.crm_customer_id, customer.crmCustomerId);
   if (crmId) return crmId;
 
   const erpId = String(pickFirst(customer.erp_customer_id, customer.erpCustomerId, ""));
-  if (erpId.startsWith("ERP-CUST-")) return erpId;
+  if (erpId) return erpId;
 
   const id = String(customer.id || "");
-  return /^\d+$/.test(id) || id.startsWith("ERP-CUST-") ? id : null;
+  return id || null;
 }
 
 function getCustomerSortTime(customer) {
@@ -138,6 +141,7 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
   const [formMode, setFormMode]             = useState(null); // null | "add" | "edit"
   const [editingCustomerId, setEditingCustomerId] = useState(null);
   const [editingCustomer, setEditingCustomer] = useState(null);
+  const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
     loadCustomers();
@@ -149,7 +153,7 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const loadCustomers = async () => {
     try {
-      const res = await axios.get(`${ERP_API_BASE_URL}/superadmin/users`);
+      const res = await axios.get(`${API_BASE_URL}/api/customers?source=erp`);
 
       const normalized = unwrapCustomerList(res.data).map((c) => {
         const plan = pickFirst(c.subscription_plan, c.subscriptionPlan, c.plan, c.package);
@@ -330,9 +334,20 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
   };
 
   const handleFormSuccess = () => {
+    setSuccessMessage(
+      editingCustomer?.source === "erp"
+        ? "Subscription updated in ERP and CRM history."
+        : "Customer saved successfully."
+    );
     loadCustomers();
     handleCloseForm();
   };
+
+  useEffect(() => {
+    if (!successMessage) return undefined;
+    const timer = window.setTimeout(() => setSuccessMessage(""), 3500);
+    return () => window.clearTimeout(timer);
+  }, [successMessage]);
 
 const handleExport = async () => {
   const exportCustomers =
@@ -516,6 +531,11 @@ const paginatedCustomers = filteredCustomers.slice(
 
   return (
     <div className="w-full p-4 md:p-1 font-sans overflow-x-hidden">
+      {successMessage && (
+        <div className="fixed right-4 top-4 z-[70] rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-700 shadow-lg">
+          {successMessage}
+        </div>
+      )}
       <CustomerHeader onExport={handleExport} />
       <CustomerStats customers={customers} />
 

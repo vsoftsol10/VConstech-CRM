@@ -80,10 +80,6 @@ export default function SubscriptionMobileCards({ filtered = [], onReminderSent 
 
               <div className="grid grid-cols-2 gap-3 border-t border-gray-50 pt-3 text-xs text-gray-500">
                 <div>
-                  <span className="mb-0.5 block text-gray-400">Billing Cycle</span>
-                  <span className="font-medium text-gray-700">{row.billing_cycle || row.billingCycle || "-"}</span>
-                </div>
-                <div>
                   <span className="mb-0.5 block text-gray-400">Payment</span>
                   <span className="font-medium text-gray-700">{titleCase(row.payment_status || row.paymentStatus) || "Pending"}</span>
                 </div>

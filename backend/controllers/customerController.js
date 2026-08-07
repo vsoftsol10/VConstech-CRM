@@ -39,6 +39,8 @@ const formattedCustomerSelect = `
 const unwrapErpCustomer = (response) => response?.customer || response?.data?.customer || response;
 const unwrapErpCustomers = (response) =>
   response?.customers || response?.data?.customers || (Array.isArray(response) ? response : []);
+const unwrapErpUsers = (response) =>
+  response?.users || response?.data?.users || (Array.isArray(response) ? response : []);
 
 const toErpPayload = (body) => ({
   customer_name: body.customer_name || body.name,
@@ -53,6 +55,15 @@ const toErpPayload = (body) => ({
 
 const isErpCustomerId = (id) => String(id || "").startsWith("ERP-CUST-");
 const isNumericCrmId = (id) => /^\d+$/.test(String(id || "").trim());
+
+const sendReminderEmailSafely = async (payload) => {
+  try {
+    return await sendSubscriptionReminderEmail(payload);
+  } catch (err) {
+    console.error("Subscription reminder email failed:", err.message);
+    return { sent: false, failed: true, reason: err.message };
+  }
+};
 
 const addDays = (date, days) => {
   const next = new Date(date);
@@ -77,6 +88,82 @@ const getPlanPrice = async (db, planName) => {
     [planKey, normalizePlanKey(planKey)]
   );
   return Number(result.rows[0]?.price || 0);
+};
+
+const pickFirst = (...values) =>
+  values.find((value) => value !== undefined && value !== null && value !== "");
+
+const toDateOrNull = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const toDateOnly = (value) => {
+  const date = toDateOrNull(value);
+  return date ? formatDate(date) : null;
+};
+
+const normalizeErpPlanName = (planName) => {
+  const key = normalizePlanKey(planName);
+  if (key === "free trial" || key === "trial") return "Trial";
+  return String(planName || "").trim();
+};
+
+const normalizeStatus = (value) => String(value || "").trim();
+
+const getErpUserById = async (id) => {
+  const data = await erpApiClient.getSuperadminUsers();
+  const users = unwrapErpUsers(data);
+  const target = String(id || "").trim();
+  return (
+    users.find((user) => {
+      const userId = String(user?.id || "").trim();
+      const erpUserId = String(pickFirst(user?.erp_user_id, user?.erpUserId, "")).trim();
+      const erpCustomerId = String(getErpCustomerId(user, "") || "").trim();
+      const clientCustomerId = user?.clientId ? `ERP-CUST-${String(user.clientId).padStart(6, "0")}` : "";
+      const mappedUserId = userId ? `ERP-USER-${userId}` : "";
+      return [userId, erpUserId, erpCustomerId, clientCustomerId, mappedUserId].some(
+        (candidate) => candidate && candidate === target
+      );
+    }) || null
+  );
+};
+
+const getErpUserPlan = (user) =>
+  pickFirst(user?.subscriptionPlan, user?.subscription_plan, user?.package, user?.plan);
+
+const getErpUserStatus = (user) =>
+  pickFirst(user?.subscriptionStatus, user?.subscription_status, user?.accountStatus, user?.status);
+
+const getErpUserStartDate = (user) =>
+  pickFirst(user?.subscriptionStartedAt, user?.subscriptionStartDate, user?.trialStartDate);
+
+const getErpUserEndDate = (user) =>
+  pickFirst(user?.subscriptionEndDate, user?.trialEndDate, user?.renewalDate);
+
+const getErpCustomerId = (user, fallbackId) =>
+  pickFirst(user?.erp_customer_id, user?.erpCustomerId, user?.clientId ? `ERP-CUST-${String(user.clientId).padStart(6, "0")}` : "", fallbackId);
+
+const getUserCompanyName = (user) =>
+  pickFirst(user?.companyName, user?.company_name, user?.company?.name);
+
+const findCrmCustomerIdForErp = async ({ crmCustomerId, erpCustomerId, erpUserId, email, phone }) => {
+  if (isNumericCrmId(crmCustomerId)) return Number(crmCustomerId);
+
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  const normalizedPhone = String(phone || "").replace(/\D/g, "");
+  const result = await pool.query(
+    `SELECT id
+     FROM customers
+     WHERE ($1::text IS NOT NULL AND erp_customer_id = $1::text)
+        OR ($2::text <> '' AND LOWER(email) = $2::text)
+        OR ($3::text <> '' AND regexp_replace(phone, '\\D', '', 'g') = $3::text)
+     ORDER BY id ASC
+     LIMIT 1`,
+    [erpCustomerId || erpUserId || null, normalizedEmail, normalizedPhone]
+  );
+  return result.rows[0]?.id || null;
 };
 
 const getLocalCustomerById = async (id) => {
@@ -260,8 +347,9 @@ const createCustomer = async (req, res) => {
 
 const getAllCustomers = async (req, res) => {
   try {
+    const useErpSource = req.query.source === "erp";
     const localCustomers = await getLocalCustomers();
-    if (localCustomers.length > 0 || req.query.source !== "erp") {
+    if (!useErpSource && localCustomers.length > 0) {
       return res.json(localCustomers);
     }
 
@@ -351,6 +439,246 @@ const updateCustomer = async (req, res) => {
     res.status(err.statusCode || err.status || 502).json({
       success: false,
       message: err.message,
+      details: err.details,
+    });
+  }
+};
+
+const updateCustomerSubscription = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const body = req.body || {};
+    const requestedPlan = pickFirst(body.planId, body.planName, body.plan, body.subscription_plan, body.subscriptionPlan);
+
+    if (!requestedPlan) {
+      return res.status(400).json({
+        success: false,
+        message: "Subscription plan is required",
+        errors: { subscription_plan: "Plan is required" },
+      });
+    }
+
+    const plan = await getPlanForSubscription(pool, requestedPlan);
+    const planPrice = Number.isFinite(plan.price) ? plan.price : 0;
+    const requestedErpUserId = pickFirst(body.erp_user_id, body.erpUserId);
+    const requestedErpCustomerId = pickFirst(body.erp_customer_id, body.erpCustomerId);
+    const erpLookupId = pickFirst(requestedErpUserId, requestedErpCustomerId, id);
+    const currentErpUser = await getErpUserById(erpLookupId);
+
+    if (!currentErpUser) {
+      return res.status(404).json({
+        success: false,
+        message: "ERP customer not found",
+      });
+    }
+
+    const previousPlan = getErpUserPlan(currentErpUser);
+    const previousStatus = getErpUserStatus(currentErpUser);
+    const previousStartDate = getErpUserStartDate(currentErpUser);
+    const previousEndDate = getErpUserEndDate(currentErpUser);
+    const newPlanForErp = normalizeErpPlanName(plan.name);
+    const planChanged = normalizePlanKey(previousPlan) !== normalizePlanKey(newPlanForErp);
+    const shouldStartPlan =
+      typeof body.shouldStartPlan === "boolean"
+        ? body.shouldStartPlan
+        : planChanged || currentErpUser.isActive === false;
+    const status = normalizeStatus(
+      pickFirst(
+        body.status,
+        body.subscription_status,
+        body.subscriptionStatus,
+        shouldStartPlan ? "Subscription Active" : previousStatus,
+        "Subscription Active"
+      )
+    );
+    const accountStatus = pickFirst(
+      body.accountStatus,
+      body.account_status,
+      shouldStartPlan ? "ACTIVE" : currentErpUser.accountStatus,
+      "ACTIVE"
+    );
+    const isActive =
+      typeof body.isActive === "boolean"
+        ? body.isActive
+        : shouldStartPlan
+          ? true
+          : Boolean(currentErpUser.isActive ?? true);
+    const startDate =
+      toDateOrNull(pickFirst(body.startDate, body.subscriptionStartDate, body.subscriptionStartedAt)) ||
+      (shouldStartPlan ? new Date() : toDateOrNull(previousStartDate)) ||
+      new Date();
+    const endDate =
+      toDateOrNull(pickFirst(body.expiryDate, body.endDate, body.renewalDate, body.subscriptionEndDate)) ||
+      (!shouldStartPlan ? toDateOrNull(previousEndDate) : null) ||
+      addDays(startDate, plan.durationInDays);
+    const companyName = String(pickFirst(body.company_name, body.companyName, getUserCompanyName(currentErpUser), "")).trim();
+    const customMembers =
+      newPlanForErp === "Advanced"
+        ? Number(pickFirst(body.customMembers, currentErpUser.customMembers, 1))
+        : null;
+
+    const erpPayload = {
+      name: String(pickFirst(body.customer_name, body.name, currentErpUser.name, "")).trim(),
+      email: String(pickFirst(body.email, currentErpUser.email, "")).trim(),
+      phoneNumber: String(pickFirst(body.phoneNumber, body.phone, currentErpUser.phoneNumber, "")).replace(/\D/g, ""),
+      city: String(pickFirst(body.city, body.location, currentErpUser.city, "")).trim(),
+      address: String(pickFirst(body.address, currentErpUser.address, "")).trim(),
+      role: pickFirst(body.role, currentErpUser.role, "Admin"),
+      companyName,
+      package: newPlanForErp,
+      subscriptionPlan: newPlanForErp,
+      customMembers,
+      subscriptionStartedAt: startDate.toISOString(),
+      subscriptionStartDate: startDate.toISOString(),
+      subscriptionEndDate: endDate.toISOString(),
+      trialStartDate: formatDate(startDate),
+      trialEndDate: formatDate(endDate),
+      renewalDate: formatDate(endDate),
+      subscriptionStatus: status,
+      accountStatus,
+      isActive,
+    };
+
+    const missing = {};
+    if (!erpPayload.name) missing.customer_name = "Customer name is required";
+    if (!erpPayload.email) missing.email = "Email is required";
+    if (!erpPayload.phoneNumber) missing.phone = "Phone is required";
+    if (!erpPayload.city) missing.location = "Location is required";
+    if (!erpPayload.address) missing.address = "Address is required";
+    if (!erpPayload.companyName) missing.company_name = "Company is required";
+    if (newPlanForErp === "Advanced" && (!customMembers || customMembers < 1)) {
+      missing.customMembers = "Advanced plan requires at least one site engineer";
+    }
+
+    if (Object.keys(missing).length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Please fix the highlighted fields.",
+        errors: missing,
+      });
+    }
+
+    const erpUserId = String(pickFirst(currentErpUser.id, requestedErpUserId, id));
+
+    const erpUpdate = await erpApiClient.updateSuperadminUser(erpUserId, erpPayload);
+    const updatedErpUser = erpUpdate?.user || erpUpdate?.data?.user || erpUpdate?.customer || erpUpdate;
+
+    if (!updatedErpUser || erpUpdate?.success === false) {
+      return res.status(502).json({
+        success: false,
+        message: "ERP subscription update failed",
+        details: erpUpdate,
+      });
+    }
+
+    const statusUpdate = await erpApiClient.updateCustomerStatus(erpUserId, {
+      status: "SUBSCRIPTION_ACTIVE",
+      accountStatus,
+      isActive,
+      plan: newPlanForErp,
+      subscriptionStartedAt: startDate.toISOString(),
+      subscriptionStartDate: startDate.toISOString(),
+      subscriptionEndDate: endDate.toISOString(),
+      trialStartDate: formatDate(startDate),
+      trialEndDate: formatDate(endDate),
+      renewalDate: formatDate(endDate),
+      startDate: formatDate(startDate),
+      expiryDate: formatDate(endDate),
+    });
+
+    const statusData = statusUpdate?.data || statusUpdate?.customer || statusUpdate?.user || statusUpdate;
+    if (statusUpdate?.success === false || !statusData) {
+      return res.status(502).json({
+        success: false,
+        message: "ERP subscription status update failed",
+        details: statusUpdate,
+      });
+    }
+
+    const confirmedErpUser = {
+      ...updatedErpUser,
+      ...((await getErpUserById(erpUserId)) || {}),
+      subscriptionStartedAt: pickFirst(statusData.subscriptionStartedAt, statusData.purchaseDate, startDate),
+      trialStartDate: pickFirst(statusData.trialStartDate, statusData.subscriptionStartedAt, startDate),
+      trialEndDate: pickFirst(statusData.trialEndDate, statusData.subscriptionEndDate, endDate),
+      subscriptionPlan: pickFirst(statusData.plan, statusData.subscriptionPlan, newPlanForErp),
+      subscriptionStatus: pickFirst(statusData.status, statusData.subscriptionStatus, "SUBSCRIPTION_ACTIVE"),
+      accountStatus: pickFirst(statusData.accountStatus, accountStatus),
+      isActive: Boolean(statusData.isActive ?? isActive),
+    };
+    const erpCustomerId = getErpCustomerId(confirmedErpUser, requestedErpCustomerId);
+    const crmCustomerId = await findCrmCustomerIdForErp({
+      crmCustomerId: pickFirst(body.crm_customer_id, body.crmCustomerId, confirmedErpUser.crmCustomerId),
+      erpCustomerId,
+      erpUserId,
+      email: erpPayload.email,
+      phone: erpPayload.phoneNumber,
+    });
+    const confirmedPlan = pickFirst(getErpUserPlan(confirmedErpUser), newPlanForErp);
+    const confirmedStatus = pickFirst(getErpUserStatus(confirmedErpUser), status);
+    const confirmedStartDate = pickFirst(getErpUserStartDate(confirmedErpUser), startDate);
+    const confirmedEndDate = pickFirst(getErpUserEndDate(confirmedErpUser), endDate);
+    const subscriptionChanged =
+      normalizePlanKey(previousPlan) !== normalizePlanKey(confirmedPlan) ||
+      normalizeStatus(previousStatus).toLowerCase() !== normalizeStatus(confirmedStatus).toLowerCase() ||
+      toDateOnly(previousStartDate) !== toDateOnly(confirmedStartDate) ||
+      toDateOnly(previousEndDate) !== toDateOnly(confirmedEndDate);
+
+    let history = null;
+    if (subscriptionChanged) {
+      const historyResult = await pool.query(
+        `INSERT INTO subscription_history
+         (customer_id, customer_name, plan_name, amount, action_type, start_date, end_date,
+          erp_customer_id, erp_user_id, customer_email,
+          previous_plan, new_plan, previous_status, new_status,
+          previous_start_date, new_start_date, previous_end_date, new_end_date,
+          changed_by, erp_subscription_id, metadata)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+         RETURNING *`,
+        [
+          crmCustomerId,
+          pickFirst(erpPayload.name, confirmedErpUser.name, "ERP Customer"),
+          confirmedPlan,
+          planPrice,
+          normalizePlanKey(previousPlan) === normalizePlanKey(confirmedPlan) ? "SUBSCRIPTION_UPDATED" : "PLAN_UPDATED",
+          toDateOnly(confirmedStartDate),
+          toDateOnly(confirmedEndDate),
+          erpCustomerId,
+          erpUserId,
+          erpPayload.email,
+          previousPlan || null,
+          confirmedPlan || null,
+          previousStatus || null,
+          confirmedStatus || null,
+          toDateOnly(previousStartDate),
+          toDateOnly(confirmedStartDate),
+          toDateOnly(previousEndDate),
+          toDateOnly(confirmedEndDate),
+          pickFirst(body.changedBy, body.changed_by, body.adminId, body.admin_id, null),
+          pickFirst(body.erpSubscriptionId, body.erp_subscription_id, confirmedErpUser.subscriptionId, null),
+          {
+            source: "crm_customer_page",
+            crmCustomerId,
+            erpCustomerId,
+            erpUserId,
+          },
+        ]
+      );
+      history = historyResult.rows[0];
+    }
+
+    return res.json({
+      success: true,
+      message: history ? "Subscription updated successfully" : "Customer updated successfully",
+      customer: confirmedErpUser,
+      history,
+    });
+  } catch (err) {
+    console.error("Subscription update failed:", err);
+    if (err.errors) return sendValidationError(res, err.errors);
+    return res.status(err.statusCode || err.status || 502).json({
+      success: false,
+      message: err.message || "Subscription update failed",
       details: err.details,
     });
   }
@@ -471,21 +799,39 @@ const sendReminder = async (req, res) => {
     const { id } = req.params;
     const today = new Date().toISOString().split("T")[0];
     const { subject, message, channel = "both" } = req.body || {};
+    const isMessageChannel = channel === "message" || channel === "whatsapp";
 
-    if (isErpCustomerId(id)) {
-      const customer = unwrapErpCustomer(await erpApiClient.getCustomer(id));
+    if (!isNumericCrmId(id)) {
+      const body = req.body || {};
+      let customer = {
+        id,
+        customer_name: body.customerName || body.customer_name || body.name || "Customer",
+        name: body.customerName || body.customer_name || body.name || "Customer",
+        email: body.to || body.email || "",
+        phone: body.phone || "",
+        company_name: body.companyName || body.company_name || body.company || "",
+        subscription_plan: body.plan || body.subscription_plan || "",
+        renewal_date: body.renewalDate || body.renewal_date || body.expire || "",
+      };
+
+      if (isErpCustomerId(id)) {
+        customer = { ...customer, ...unwrapErpCustomer(await erpApiClient.getCustomer(id)) };
+      }
       if (!customer?.id) {
         return res.status(404).json({ success: false, message: "ERP customer not found" });
       }
 
       const emailStatus =
-        channel === "message"
+        isMessageChannel
           ? { sent: false, skipped: true }
-          : await sendSubscriptionReminderEmail({
+          : await sendReminderEmailSafely({
               name: customer.customer_name || customer.name,
-              email: customer.email,
+              email: customer.email || body.to,
               subject,
               message,
+              companyName: customer.company_name || customer.companyName,
+              plan: customer.subscription_plan || customer.plan,
+              expiryDate: customer.renewal_date || customer.renewalDate || customer.expire,
             });
 
       const messageStatus =
@@ -515,9 +861,9 @@ const sendReminder = async (req, res) => {
 
     const customer = current.rows[0];
     const emailStatus =
-      channel === "message"
+      isMessageChannel
         ? { sent: false, skipped: true }
-        : await sendSubscriptionReminderEmail({
+        : await sendReminderEmailSafely({
             name: customer.customer_name,
             email: customer.email,
             subject,
@@ -564,6 +910,7 @@ module.exports = {
   getConvertedLeadCustomers,
   getCustomerById,
   updateCustomer,
+  updateCustomerSubscription,
   updateCustomerStatus,
   deleteCustomer,
   renewSubscription,

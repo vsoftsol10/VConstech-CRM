@@ -11,6 +11,7 @@ router.post("/subscription-history/erp-sync", subscriptionController.syncErpSubs
 router.get("/subscription-history/:customerId", subscriptionController.getSubscriptionHistory);
 router.get("/stats/monthly", subscriptionController.getCustomerStats);
 
+router.put("/:id/subscription", customerController.updateCustomerSubscription);
 router.get("/:id", customerController.getCustomerById);
 router.put("/:id", customerController.updateCustomer);
 router.patch("/:id/status", customerController.updateCustomerStatus);

@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import Select from "react-select";
 import { FiX } from "react-icons/fi";
 import axios from "axios";
-import { API_BASE_URL, ERP_API_BASE_URL, unwrapCustomer, unwrapCustomerList } from "../../config/api";
+import { API_BASE_URL, unwrapCustomer, unwrapCustomerList } from "../../config/api";
 
 const YELLOW = "#F5C518";
 
@@ -211,7 +211,29 @@ export default function CustomerFormPage({
   };
 
   const setPlan = (plan) => {
-    setForm((prev) => ({ ...prev, subscription_plan: plan }));
+    setForm((prev) => {
+      const selectedPlanName = plan?.label || "";
+      const currentPlanName =
+        initialCustomer?.subscription_plan ||
+        initialCustomer?.plan ||
+        initialCustomer?.raw?.subscriptionPlan ||
+        initialCustomer?.raw?.package;
+      const planChanged =
+        String(currentPlanName || "").trim().toLowerCase() !==
+        String(selectedPlanName || "").trim().toLowerCase();
+
+      if (!plan || (!isNew && !planChanged && initialCustomer?.active !== false)) {
+        return { ...prev, subscription_plan: plan };
+      }
+
+      const planDates = getPlanDates(selectedPlanName);
+      return {
+        ...prev,
+        subscription_plan: plan,
+        purchase_date: planDates.startDateOnly,
+        renewal_date: planDates.endDateOnly,
+      };
+    });
     setErrors((prev) => ({ ...prev, subscription_plan: "", form: "" }));
   };
 
@@ -243,7 +265,7 @@ export default function CustomerFormPage({
     const phone = form.phone.trim();
 
     if (isErpCustomer) {
-      const { data } = await axios.get(`${ERP_API_BASE_URL}/superadmin/users`);
+      const { data } = await axios.get(`${API_BASE_URL}/api/customers?source=erp`);
       const duplicate = unwrapCustomerList(data).find((customer) => {
         if (String(customer.id) === currentId) return false;
         return (
@@ -334,48 +356,43 @@ export default function CustomerFormPage({
       const planDates = getPlanDates(form.subscription_plan.label);
 
       if (isErpCustomer) {
-        const erpPayload = {
+        const subscriptionPayload = {
+          ...payload,
           name: form.customer_name.trim(),
-          email: form.email.trim(),
           phoneNumber: form.phone.trim(),
           city: form.location.trim(),
-          address: form.address.trim(),
           role: initialCustomer?.role || initialCustomer?.raw?.role || "Admin",
           companyName: form.company_name.trim(),
-          package: selectedPlanName,
+          plan: selectedPlanName,
+          planName: selectedPlanName,
           subscriptionPlan: selectedPlanName,
+          crmCustomerId: initialCustomer?.crm_customer_id || initialCustomer?.crmCustomerId || initialCustomer?.raw?.crmCustomerId,
+          erpCustomerId: initialCustomer?.erp_customer_id || initialCustomer?.erpCustomerId || initialCustomer?.raw?.erpCustomerId,
+          erpUserId: initialCustomer?.erp_user_id || initialCustomer?.erpUserId || initialCustomer?.raw?.erp_user_id || initialCustomer?.raw?.id,
           customMembers:
             selectedPlanName === "Advanced"
               ? Number(initialCustomer?.members || initialCustomer?.raw?.customMembers || 1)
               : null,
+          shouldStartPlan,
         };
 
         if (shouldStartPlan) {
-          Object.assign(erpPayload, {
+          Object.assign(subscriptionPayload, {
             subscriptionStartedAt: planDates.startDate.toISOString(),
             subscriptionStartDate: planDates.startDate.toISOString(),
             subscriptionEndDate: planDates.endDate.toISOString(),
             trialStartDate: planDates.startDateOnly,
             trialEndDate: planDates.endDateOnly,
             renewalDate: planDates.endDateOnly,
+            startDate: planDates.startDateOnly,
+            expiryDate: planDates.endDateOnly,
             subscriptionStatus: "Subscription Active",
             accountStatus: "ACTIVE",
             isActive: true,
           });
         }
 
-        await axios.put(`${ERP_API_BASE_URL}/superadmin/update-user/${id}`, erpPayload);
-
-        if (shouldStartPlan) {
-          await axios.put(`${ERP_API_BASE_URL}/superadmin/toggle-active/${id}`, {
-            isActive: true,
-          });
-        }
-
-        const crmCustomerId = initialCustomer?.crm_customer_id || initialCustomer?.crmCustomerId || initialCustomer?.raw?.crmCustomerId;
-        if (crmCustomerId) {
-          await axios.put(`${API_BASE_URL}/api/customers/${crmCustomerId}`, payload);
-        }
+        await axios.put(`${API_BASE_URL}/api/customers/${id}/subscription`, subscriptionPayload);
       } else if (isNew) {
         await axios.post(`${API_BASE_URL}/api/customers`, payload);
       } else {

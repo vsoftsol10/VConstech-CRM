@@ -387,17 +387,16 @@ const getSubscriptionHistory = async (req, res) => {
   try {
     const { customerId } = req.params;
     const crmCustomerId = await resolveCrmCustomerId(customerId);
-
-    if (!crmCustomerId) {
-      return res.json([]);
-    }
+    const rawCustomerId = String(customerId || "").trim();
 
     const result = await pool.query(
       `SELECT *
        FROM subscription_history
-       WHERE customer_id = $1
+       WHERE ($1::int IS NOT NULL AND customer_id = $1::int)
+          OR ($2::text <> '' AND erp_customer_id = $2::text)
+          OR ($2::text <> '' AND erp_user_id = $2::text)
        ORDER BY created_at DESC`,
-      [crmCustomerId]
+      [/^\d+$/.test(String(crmCustomerId || "")) ? Number(crmCustomerId) : null, rawCustomerId]
     );
 
     res.json(result.rows);

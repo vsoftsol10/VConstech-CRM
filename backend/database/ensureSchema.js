@@ -46,6 +46,34 @@ const ensureMergeSchema = async () => {
   `);
 
   await pool.query(`
+    ALTER TABLE IF EXISTS subscription_history
+      ADD COLUMN IF NOT EXISTS erp_customer_id text,
+      ADD COLUMN IF NOT EXISTS erp_user_id text,
+      ADD COLUMN IF NOT EXISTS customer_email text,
+      ADD COLUMN IF NOT EXISTS previous_plan text,
+      ADD COLUMN IF NOT EXISTS new_plan text,
+      ADD COLUMN IF NOT EXISTS previous_status text,
+      ADD COLUMN IF NOT EXISTS new_status text,
+      ADD COLUMN IF NOT EXISTS previous_start_date date,
+      ADD COLUMN IF NOT EXISTS new_start_date date,
+      ADD COLUMN IF NOT EXISTS previous_end_date date,
+      ADD COLUMN IF NOT EXISTS new_end_date date,
+      ADD COLUMN IF NOT EXISTS changed_by text,
+      ADD COLUMN IF NOT EXISTS erp_subscription_id text,
+      ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}'::jsonb
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS subscription_history_erp_customer_idx
+    ON subscription_history (erp_customer_id)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS subscription_history_erp_user_idx
+    ON subscription_history (erp_user_id)
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS crm_erp_status_events (
       id bigserial PRIMARY KEY,
       event_id text NOT NULL UNIQUE,

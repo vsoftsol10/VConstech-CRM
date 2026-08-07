@@ -1,14 +1,41 @@
 import { motion } from "framer-motion";
 import { CardIcon } from "../icons/SubscriptionIcons";
+import { parseExpire } from "../../../utils/subscriptionUtils";
 
 function computeActive(customer) {
+  if (typeof customer.active === "boolean") return customer.active;
+
+  const status = String(
+    customer.subscription_status ||
+      customer.subscriptionStatus ||
+      customer.payment_status ||
+      customer.paymentStatus ||
+      customer.accountStatus ||
+      customer.status ||
+      ""
+  ).toLowerCase();
+
+  if (/(expired|inactive|cancelled|canceled)/.test(status)) return false;
+  if (/(active|paid)/.test(status)) return true;
+
   const dateStr = customer.renewal_date_raw || customer.renewal_date;
   if (!dateStr) return false;
-  const renewal = new Date(dateStr);
-  if (isNaN(renewal)) return false;
+  const renewal = parseExpire(dateStr);
+  if (!renewal) return false;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  renewal.setHours(0, 0, 0, 0);
   return renewal >= today;
+}
+
+function getRenewalDate(customer) {
+  return parseExpire(
+    customer.renewal_date_raw ||
+      customer.renewal_date ||
+      customer.subscription_end_date ||
+      customer.subscriptionEndDate ||
+      customer.expire
+  );
 }
 
 function buildStatCards(customers) {
@@ -23,13 +50,19 @@ function buildStatCards(customers) {
 
   // ── Expiring Soon: active but within 7 days ────────────────
   const expiringSoon = customers.filter((c) => {
-    const dateStr = c.renewal_date_raw || c.renewal_date;
-    const renewal = new Date(dateStr);
-    return !isNaN(renewal) && renewal >= today && renewal <= in7Days;
+    const renewal = getRenewalDate(c);
+    if (!renewal) return false;
+    renewal.setHours(0, 0, 0, 0);
+    return computeActive(c) && renewal >= today && renewal <= in7Days;
   }).length;
 
   // ── Due for Renewal: already expired ──────────────────────
-  const renewedPlans = customers.filter((c) => c.has_renewed === true).length;
+  const dueForRenewal = customers.filter((c) => {
+    const renewal = getRenewalDate(c);
+    if (!renewal) return !computeActive(c);
+    renewal.setHours(0, 0, 0, 0);
+    return renewal < today || !computeActive(c);
+  }).length;
 
   // ── Notified: reminder_sent = true ────────────────────────
   const notified = customers.filter((c) => c.reminder_sent === true).length;
@@ -51,10 +84,10 @@ function buildStatCards(customers) {
     },
     {
       label:     "Renew Plan",
-      value:     renewedPlans,
-      sub:       "Customers renewed",
-      badge:     renewedPlans > 0 ? `${renewedPlans} renewed` : "0",
-      badgeType: "green",
+      value:     dueForRenewal,
+      sub:       "Due or expired subscriptions",
+      badge:     dueForRenewal > 0 ? "Action needed" : "All clear",
+      badgeType: dueForRenewal > 0 ? "red" : "green",
     },
     {
       label:     "Notify Customer",

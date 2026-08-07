@@ -16,6 +16,11 @@ const integrationConfig = {
     endpoints: {
       invitations: process.env.ERP_INVITATION_PATH || "/api/invitations",
       customers: process.env.ERP_CUSTOMER_PATH || "/api/customers",
+      superadminUsers: process.env.ERP_SUPERADMIN_USERS_PATH || "/api/superadmin/users",
+      superadminUpdateUser:
+        process.env.ERP_SUPERADMIN_UPDATE_USER_PATH || "/api/superadmin/update-user/:userId",
+      superadminToggleActive:
+        process.env.ERP_SUPERADMIN_TOGGLE_ACTIVE_PATH || "/api/superadmin/toggle-active/:userId",
       customerStatus:
         process.env.ERP_CUSTOMER_STATUS_PATH ||
         "/api/subscription-sync/customers/:customerId/status",

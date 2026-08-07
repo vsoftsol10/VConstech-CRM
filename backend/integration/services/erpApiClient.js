@@ -103,6 +103,13 @@ const erpApiClient = {
       params,
     }),
 
+  getSuperadminUsers: (params) =>
+    request({
+      method: "get",
+      url: integrationConfig.erp.endpoints.superadminUsers,
+      params,
+    }),
+
   getCustomer: (customerId) =>
     request({
       method: "get",
@@ -132,6 +139,24 @@ const erpApiClient = {
         String(customerId)
       )}`,
       data: payload,
+    }),
+
+  updateSuperadminUser: (userId, payload) =>
+    request({
+      method: "put",
+      url: replacePathParams(integrationConfig.erp.endpoints.superadminUpdateUser, {
+        userId,
+      }),
+      data: payload,
+    }),
+
+  toggleSuperadminUserActive: (userId, isActive) =>
+    request({
+      method: "put",
+      url: replacePathParams(integrationConfig.erp.endpoints.superadminToggleActive, {
+        userId,
+      }),
+      data: { isActive },
     }),
 
   deleteCustomer: (customerId) =>

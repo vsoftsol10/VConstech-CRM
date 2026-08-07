@@ -42,10 +42,6 @@ function getCustomerName(row) {
   return row.customer_name || row.name || "-";
 }
 
-function getBillingCycle(row) {
-  return row.billing_cycle || row.billingCycle || row.renewal_cycle || row.cycle || "-";
-}
-
 function getPaymentStatus(row) {
   return titleCase(row.payment_status || row.paymentStatus || row.payment_state) || "Pending";
 }
@@ -222,31 +218,27 @@ export default function SubscriptionTable({ filtered = [], onReminderSent }) {
   const [headerFilterOpen, setHeaderFilterOpen] = useState(null);
   const [filterPlan, setFilterPlan] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
-  const [filterBillingCycle, setFilterBillingCycle] = useState("");
   const [filterPaymentStatus, setFilterPaymentStatus] = useState("");
 
   const planBtnRef = useRef(null);
   const statusBtnRef = useRef(null);
-  const billingBtnRef = useRef(null);
   const paymentBtnRef = useRef(null);
 
   const plans = useMemo(() => uniqueOptions(filtered, getPlan), [filtered]);
   const statuses = useMemo(() => uniqueOptions(filtered, getStatus), [filtered]);
-  const billingCycles = useMemo(() => uniqueOptions(filtered, getBillingCycle), [filtered]);
   const paymentStatuses = useMemo(() => uniqueOptions(filtered, getPaymentStatus), [filtered]);
 
-  const activeFilterCount = [filterPlan, filterStatus, filterBillingCycle, filterPaymentStatus].filter(Boolean).length;
+  const activeFilterCount = [filterPlan, filterStatus, filterPaymentStatus].filter(Boolean).length;
 
   const tableRows = useMemo(
     () =>
       filtered.filter((row) => {
         const matchPlan = !filterPlan || getPlan(row) === filterPlan;
         const matchStatus = !filterStatus || getStatus(row) === filterStatus;
-        const matchBilling = !filterBillingCycle || getBillingCycle(row) === filterBillingCycle;
         const matchPayment = !filterPaymentStatus || getPaymentStatus(row) === filterPaymentStatus;
-        return matchPlan && matchStatus && matchBilling && matchPayment;
+        return matchPlan && matchStatus && matchPayment;
       }),
-    [filtered, filterPlan, filterStatus, filterBillingCycle, filterPaymentStatus]
+    [filtered, filterPlan, filterStatus, filterPaymentStatus]
   );
 
   const totalPages = Math.max(1, Math.ceil(tableRows.length / rowsPerPage));
@@ -264,7 +256,6 @@ export default function SubscriptionTable({ filtered = [], onReminderSent }) {
   const clearHeaderFilters = () => {
     setFilterPlan("");
     setFilterStatus("");
-    setFilterBillingCycle("");
     setFilterPaymentStatus("");
     setCurrentPage(1);
   };
@@ -283,7 +274,6 @@ export default function SubscriptionTable({ filtered = [], onReminderSent }) {
             <span className="font-semibold text-gray-500">Filters:</span>
             {filterPlan && <span className="rounded-full bg-yellow-50 px-2.5 py-1 font-semibold text-yellow-700">Plan: {filterPlan}</span>}
             {filterStatus && <span className="rounded-full bg-yellow-50 px-2.5 py-1 font-semibold text-yellow-700">Status: {filterStatus}</span>}
-            {filterBillingCycle && <span className="rounded-full bg-yellow-50 px-2.5 py-1 font-semibold text-yellow-700">Billing: {filterBillingCycle}</span>}
             {filterPaymentStatus && <span className="rounded-full bg-yellow-50 px-2.5 py-1 font-semibold text-yellow-700">Payment: {filterPaymentStatus}</span>}
             <button
               type="button"
@@ -299,11 +289,10 @@ export default function SubscriptionTable({ filtered = [], onReminderSent }) {
           <table className="w-full table-fixed text-sm">
             <colgroup>
               <col className="w-[11%]" />
-              <col className="w-[17%]" />
-              <col className="w-[10%]" />
-              <col className="w-[12%]" />
-              <col className="w-[12%]" />
+              <col className="w-[20%]" />
               <col className="w-[11%]" />
+              <col className="w-[13%]" />
+              <col className="w-[12%]" />
               <col className="w-[12%]" />
               <col className="w-[11%]" />
               <col className="w-[72px]" />
@@ -359,29 +348,6 @@ export default function SubscriptionTable({ filtered = [], onReminderSent }) {
                 </th>
                 <th className="px-4 py-3 text-left text-[13px] font-bold tracking-wide text-black">
                   <FilterHeader
-                    label="Billing Cycle"
-                    active={filterBillingCycle}
-                    buttonRef={billingBtnRef}
-                    open={headerFilterOpen === "billing"}
-                    onToggle={() => setHeaderFilterOpen((open) => (open === "billing" ? null : "billing"))}
-                  >
-                    <HeaderFilterMenu
-                      anchorRef={billingBtnRef}
-                      isOpen={headerFilterOpen === "billing"}
-                      onClose={() => setHeaderFilterOpen(null)}
-                      allLabel="All Billing Cycles"
-                      options={billingCycles}
-                      selected={filterBillingCycle}
-                      onSelect={(value) => {
-                        setFilterBillingCycle(value);
-                        setHeaderFilterOpen(null);
-                        setCurrentPage(1);
-                      }}
-                    />
-                  </FilterHeader>
-                </th>
-                <th className="px-4 py-3 text-left text-[13px] font-bold tracking-wide text-black">
-                  <FilterHeader
                     label="Payment Status"
                     active={filterPaymentStatus}
                     buttonRef={paymentBtnRef}
@@ -413,7 +379,7 @@ export default function SubscriptionTable({ filtered = [], onReminderSent }) {
             <tbody className="relative z-0">
               {paginated.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-gray-400">
+                  <td colSpan={8} className="py-12 text-center text-gray-400">
                     <div className="flex flex-col items-center gap-2" style={{ animation: "fadeIn 0.4s ease" }}>
                       <svg width="40" height="40" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="text-gray-300">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -458,9 +424,6 @@ export default function SubscriptionTable({ filtered = [], onReminderSent }) {
                         </div>
                       </td>
                       <td className="px-4 py-3 align-middle"><Badge value={status} type="status" /></td>
-                      <td className="px-4 py-3 align-middle text-gray-600">
-                        <span className="block truncate" title={getBillingCycle(row)}>{getBillingCycle(row)}</span>
-                      </td>
                       <td className="px-4 py-3 align-middle"><Badge value={paymentStatus} type="payment" /></td>
                       <td className="px-4 py-3 align-middle text-gray-600">
                         <span className="block truncate" title={formatDisplayDate(row.renewal_date || row.expire || row.expires_at)}>

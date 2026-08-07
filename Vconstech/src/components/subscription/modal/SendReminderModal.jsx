@@ -149,6 +149,11 @@ export default function SendReminderModal({
           message: form.message,
           to: form.to,
           phone: form.phone,
+          customerName: row.customer_name || row.name,
+          email: row.email,
+          companyName: row.company_name || row.company,
+          plan: row.subscription_plan || row.plan,
+          renewalDate: row.renewal_date || row.expire || row.expires_at,
         }),
       });
       const data = await res.json();

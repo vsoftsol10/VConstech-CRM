@@ -11,6 +11,82 @@ import { API_BASE_URL, unwrapCustomerList } from "../config/api";
 import { EMPTY_FILTERS } from "../constants/subscriptionConstants";
 import { parseExpire } from "../utils/subscriptionUtils";
 
+function pickFirst(...values) {
+  return values.find((value) => value !== undefined && value !== null && value !== "");
+}
+
+function formatPlanLabel(plan) {
+  const value = String(plan || "").trim();
+  if (!value) return "";
+  if (value.toLowerCase() === "trail") return "Trial";
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+}
+
+function isActiveSubscription(customer, renewalDate) {
+  const expiry = parseExpire(renewalDate);
+  const status = String(
+    pickFirst(customer.subscription_status, customer.subscriptionStatus, customer.payment_status, customer.paymentStatus, customer.accountStatus, customer.status, "")
+  ).toLowerCase();
+
+  if (expiry) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    expiry.setHours(0, 0, 0, 0);
+    return expiry >= today && !/(expired|inactive|cancelled|canceled)/.test(status);
+  }
+
+  if (/(expired|inactive|cancelled|canceled)/.test(status)) return false;
+  if (/(active|paid)/.test(status)) return true;
+  return Boolean(customer.active ?? customer.isActive);
+}
+
+function normalizeErpSubscription(customer) {
+  const plan = pickFirst(customer.subscription_plan, customer.subscriptionPlan, customer.plan, customer.package);
+  const renewalDate = pickFirst(
+    customer.renewal_date,
+    customer.renewalDate,
+    customer.subscription_end_date,
+    customer.subscriptionEndDate,
+    customer.trialEndDate,
+    customer.expire,
+    customer.expires_at
+  );
+  const startDate = pickFirst(
+    customer.start_date,
+    customer.startDate,
+    customer.subscription_start_date,
+    customer.subscriptionStartedAt,
+    customer.subscriptionStartDate,
+    customer.trialStartDate,
+    customer.createdAt
+  );
+  const history = customer.subscription_history || customer.subscriptionHistory || customer.history || [];
+
+  return {
+    ...customer,
+    id: customer.id,
+    source: "erp",
+    customer_name: customer.customer_name || customer.name || customer.userName || "",
+    name: customer.customer_name || customer.name || customer.userName || "",
+    email: customer.email || customer.userEmail || customer.clientEmail || "",
+    phone: customer.phone || customer.phoneNumber || customer.clientPhone || "",
+    subscription_plan: formatPlanLabel(plan),
+    plan: formatPlanLabel(plan),
+    payment_status: pickFirst(customer.payment_status, customer.paymentStatus, customer.subscription_status, customer.subscriptionStatus, customer.accountStatus),
+    subscription_status: pickFirst(customer.subscription_status, customer.subscriptionStatus, customer.accountStatus, customer.status),
+    billing_cycle: pickFirst(customer.billing_cycle, customer.billingCycle, customer.renewal_cycle, customer.cycle, customer.packageDuration),
+    start_date: startDate || "",
+    renewal_date: renewalDate || "",
+    renewal_date_raw: renewalDate || "",
+    expire: renewalDate || "",
+    created_at: pickFirst(customer.created_at, customer.createdAt, customer.userCreatedAt, startDate),
+    active: isActiveSubscription(customer, renewalDate),
+    has_renewed: Boolean(customer.has_renewed || customer.hasRenewed || customer.renewed || history.length > 0),
+    reminder_sent: Boolean(customer.reminder_sent || customer.reminderSent),
+    reminder_sent_date: customer.reminder_sent_date || customer.reminderSentOn || "",
+  };
+}
+
 export default function SubscriptionPage() {
   const [tableSearch, setTableSearch] = useState("");
   const [showFilter, setShowFilter] = useState(false);
@@ -23,8 +99,8 @@ export default function SubscriptionPage() {
   useEffect(() => {
     const loadCustomers = async () => {
       try {
-        const res = await axios.get(`${API_BASE_URL}/api/customers/converted-leads`);
-        setSubscriptions(unwrapCustomerList(res.data));
+        const res = await axios.get(`${API_BASE_URL}/api/customers?source=erp`);
+        setSubscriptions(unwrapCustomerList(res.data).map(normalizeErpSubscription));
       } catch (err) {
         console.log("API error:", err);
       }

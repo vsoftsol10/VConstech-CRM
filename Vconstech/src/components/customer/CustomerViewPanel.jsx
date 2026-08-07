@@ -34,14 +34,24 @@ function Row({ label, value }) {
 }
 
 function getHistoryCustomerId(customer) {
+  const erpUserId = customer?.erp_user_id || customer?.erpUserId || customer?.raw?.erp_user_id || customer?.raw?.id;
+  if (erpUserId) return erpUserId;
+
   const crmId = customer?.crm_customer_id || customer?.crmCustomerId;
   if (crmId) return crmId;
 
   const erpId = String(customer?.erp_customer_id || customer?.erpCustomerId || "");
-  if (erpId.startsWith("ERP-CUST-")) return erpId;
+  if (erpId) return erpId;
 
   const id = String(customer?.id || "");
-  return /^\d+$/.test(id) || id.startsWith("ERP-CUST-") ? id : null;
+  return id || null;
+}
+
+function formatHistoryPlan(item) {
+  if (item.previous_plan || item.new_plan) {
+    return `${safe(item.previous_plan)} -> ${safe(item.new_plan || item.plan_name)}`;
+  }
+  return safe(item.plan_name);
 }
 
 export default function CustomerViewPanel({ customer, onClose, onEdit }) {
@@ -245,7 +255,7 @@ export default function CustomerViewPanel({ customer, onClose, onEdit }) {
                       </div>
 
                       <p className="text-sm text-gray-700 mb-2">
-                        {item.plan_name}
+                        {formatHistoryPlan(item)}
                         {item.amount && ` • ₹${item.amount}`}
                       </p>
 

@@ -58,6 +58,7 @@ const buildMonthlyData = (rows, selectedYear) => {
 
 const Dashboard = () => {
   const [customers, setCustomers] = useState([]);
+  const [erpCustomers, setErpCustomers] = useState([]);
   const [leads, setLeads] = useState([]);
   const [stats, setStats] = useState(null);
   const currentYear = new Date().getFullYear();
@@ -67,9 +68,10 @@ const Dashboard = () => {
 
 useEffect(() => {
   const load = async () => {
-    const [customersResult, dashboardStatsResult, leadsResult] =
+    const [customersResult, erpCustomersResult, dashboardStatsResult, leadsResult] =
       await Promise.allSettled([
         axios.get(`${API_BASE_URL}/api/customers/converted-leads`),
+        axios.get(`${API_BASE_URL}/api/customers`, { params: { source: "erp" } }),
         axios.get(`${API_BASE_URL}/api/dashboard/stats`),
         axios.get(`${API_BASE_URL}/api/leads`),
       ]);
@@ -89,6 +91,12 @@ useEffect(() => {
     } else {
       setCustomers(customerRows);
     }
+
+    setErpCustomers(
+      erpCustomersResult.status === "fulfilled"
+        ? unwrapCustomerList(erpCustomersResult.value.data)
+        : []
+    );
 
     setChartData(buildMonthlyData(customerRows, selectedYear));
 
@@ -110,7 +118,7 @@ useEffect(() => {
         Dashboard
       </h1>
 
-      <StatsCards customers={customers} leads={leads} stats={stats} />
+      <StatsCards customers={erpCustomers} leads={leads} stats={stats} />
 
       <PlanUsageSection customers={customers} leads={leads} />
 
