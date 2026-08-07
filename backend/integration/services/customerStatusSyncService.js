@@ -24,6 +24,7 @@ const STATUS_MAP = {
 };
 
 const normalizeStatus = (status) => String(status || "").trim().toUpperCase();
+const isNumericId = (value) => /^\d+$/.test(String(value || "").trim());
 
 const addDays = (date, days) => {
   const next = new Date(date);
@@ -103,7 +104,9 @@ const validateStatusPayload = (payload = {}) => {
   const errors = {};
 
   if (!payload.eventId) errors.eventId = "eventId is required";
-  if (!payload.crmCustomerId) errors.crmCustomerId = "crmCustomerId is required";
+  if (!payload.crmCustomerId && !payload.erpCustomerId && !payload.erpUserId && !payload.customerId) {
+    errors.customer = "Provide crmCustomerId, erpCustomerId, erpUserId, or customerId";
+  }
   if (!status || !STATUS_MAP[status]) {
     errors.status =
       "status must be TRIAL_ACTIVE, SUBSCRIPTION_ACTIVE, TRIAL_EXPIRED, or SUBSCRIPTION_EXPIRED";
@@ -138,9 +141,26 @@ const syncCustomerStatus = async (payload) => {
       };
     }
 
+    const crmCustomerId = isNumericId(payload.crmCustomerId) ? Number(payload.crmCustomerId) : null;
+    const customerId = isNumericId(payload.customerId) ? Number(payload.customerId) : null;
+    const erpIdentifiers = [
+      payload.erpCustomerId,
+      payload.erpUserId,
+      payload.customerId,
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+
     const customerResult = await client.query(
-      "SELECT * FROM customers WHERE id = $1 FOR UPDATE",
-      [payload.crmCustomerId]
+      `SELECT *
+       FROM customers
+       WHERE ($1::integer IS NOT NULL AND id = $1::integer)
+          OR ($2::integer IS NOT NULL AND id = $2::integer)
+          OR ($3::text[] IS NOT NULL AND erp_customer_id = ANY($3::text[]))
+       ORDER BY id ASC
+       LIMIT 1
+       FOR UPDATE`,
+      [crmCustomerId, customerId, erpIdentifiers.length > 0 ? erpIdentifiers : null]
     );
 
     const customer = customerResult.rows[0];
@@ -176,7 +196,7 @@ const syncCustomerStatus = async (payload) => {
         payload.purchaseDate || payload.subscriptionStartedAt || null,
         statusConfig.customerStatus,
         statusConfig.paymentStatus,
-        payload.crmCustomerId,
+        customer.id,
         status === "SUBSCRIPTION_EXPIRED",
         inactiveDate,
       ]
@@ -197,7 +217,7 @@ const syncCustomerStatus = async (payload) => {
        RETURNING *`,
       [
         payload.eventId,
-        payload.crmCustomerId,
+        customer.id,
         payload.erpCustomerId || null,
         status,
         payload,
