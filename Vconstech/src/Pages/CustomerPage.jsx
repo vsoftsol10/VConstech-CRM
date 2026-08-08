@@ -153,7 +153,7 @@ const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const loadCustomers = async () => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/api/customers?source=erp`);
+      const res = await axios.get(`${ERP_API_BASE_URL}/superadmin/users`);
 
       const normalized = unwrapCustomerList(res.data).map((c) => {
         const plan = pickFirst(c.subscription_plan, c.subscriptionPlan, c.plan, c.package);

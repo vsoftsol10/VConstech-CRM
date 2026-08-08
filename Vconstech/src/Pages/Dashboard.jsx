@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { API_BASE_URL, unwrapCustomerList } from "../config/api";
+import { API_BASE_URL, ERP_API_BASE_URL, unwrapCustomerList } from "../config/api";
 
 import StatsCards from "../components/dashboard/StatsCards";
 import PlanUsageSection from "../components/dashboard/PlanUsageSection";
@@ -71,7 +71,7 @@ useEffect(() => {
     const [customersResult, erpCustomersResult, dashboardStatsResult, leadsResult] =
       await Promise.allSettled([
         axios.get(`${API_BASE_URL}/api/customers/converted-leads`),
-        axios.get(`${API_BASE_URL}/api/customers`, { params: { source: "erp" } }),
+        axios.get(`${ERP_API_BASE_URL}/superadmin/users`),
         axios.get(`${API_BASE_URL}/api/dashboard/stats`),
         axios.get(`${API_BASE_URL}/api/leads`),
       ]);
@@ -101,9 +101,15 @@ useEffect(() => {
     setChartData(buildMonthlyData(customerRows, selectedYear));
 
     if (dashboardStatsResult.status === "fulfilled") {
-      setStats(dashboardStatsResult.value.data?.data || null);
+      setStats(dashboardStatsResult.value?.data?.data ?? dashboardStatsResult.value?.data ?? null);
     } else {
-      console.error(dashboardStatsResult.reason);
+      const err = dashboardStatsResult.reason;
+console.error("Dashboard stats request failed:", {
+  status: err?.response?.status,
+  data: err?.response?.data,
+  message: err?.message,
+});
+      setStats(null);
     }
 
     setLeads(leadRows);

@@ -8,10 +8,15 @@ const countValue = async (query) => {
 };
 
 const unwrapErpCustomers = (response) =>
-  response?.customers || response?.data?.customers || (Array.isArray(response) ? response : []);
+  response?.customers ||
+  response?.data?.customers ||
+  response?.users ||
+  response?.data?.users ||
+  (Array.isArray(response) ? response : []);
 
 const isActiveCustomer = (customer) => {
   if (typeof customer?.active === "boolean") return customer.active;
+  if (typeof customer?.isActive === "boolean") return customer.isActive;
 
   const status = String(
     customer?.subscription_status ||
@@ -36,7 +41,7 @@ const isActiveCustomer = (customer) => {
 const getErpCustomerStats = async () => {
   const data = erpSupabaseCustomerService.isConfigured()
     ? await erpSupabaseCustomerService.getCustomers()
-    : await erpApiClient.getCustomers();
+    : await erpApiClient.getSuperadminUsers();
   const customers = unwrapErpCustomers(data);
 
   return {
@@ -45,9 +50,37 @@ const getErpCustomerStats = async () => {
   };
 };
 
+const getLocalCustomerStats = async () => {
+  const [customers, activeCustomers] = await Promise.all([
+    countValue("SELECT COUNT(*)::int AS count FROM customers"),
+    countValue(`
+      SELECT COUNT(*)::int AS count
+      FROM customers
+      WHERE active = true
+         OR LOWER(COALESCE(subscription_status, payment_status, '')) IN (
+           'active',
+           'trial active',
+           'trial_active',
+           'subscription active',
+           'subscription_active'
+         )
+    `),
+  ]);
+
+  return { customers, activeCustomers };
+};
+
 const getDashboardStats = async (_req, res) => {
   try {
-    const erpCustomerStats = await getErpCustomerStats();
+    let customerStats;
+
+    try {
+      customerStats = await getErpCustomerStats();
+    } catch (sourceErr) {
+      console.error("Dashboard customer source unavailable, using local CRM customers:", sourceErr.message);
+      customerStats = await getLocalCustomerStats();
+    }
+
     const [
       leads,
       tickets,
@@ -68,10 +101,10 @@ const getDashboardStats = async (_req, res) => {
       success: true,
       data: {
         leads,
-        customers: erpCustomerStats.customers,
-        activeCustomers: erpCustomerStats.activeCustomers,
-        inactiveCustomers: erpCustomerStats.customers - erpCustomerStats.activeCustomers,
-        activeSubscriptions: erpCustomerStats.activeCustomers,
+        customers: customerStats.customers,
+        activeCustomers: customerStats.activeCustomers,
+        inactiveCustomers: customerStats.customers - customerStats.activeCustomers,
+        activeSubscriptions: customerStats.activeCustomers,
         tickets,
         tasks,
         teamMembers,
