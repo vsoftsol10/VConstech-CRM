@@ -4,7 +4,7 @@ import { FiDatabase, FiUsers, FiTrendingUp, FiTrendingDown,FiUserCheck,FiUserX }
 export default function CustomerStats({ customers = [], leads = [], stats }) {
 
   const total = stats?.customers ?? customers.length ?? 0;
-  const active = stats?.activeCustomers ?? customers.filter(c => c.active).length;
+  const active = stats?.activeCustomers ?? customers.filter(c => Boolean(c.active ?? c.isActive)).length;
   const inactive = stats?.inactiveCustomers ?? total - active;
 
   const activeGrowth =

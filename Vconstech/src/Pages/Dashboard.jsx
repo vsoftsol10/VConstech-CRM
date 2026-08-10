@@ -15,6 +15,36 @@ const isCustomerLead = (lead) => {
   return Boolean(lead?.is_customer) || status === "won" || status === "converted";
 };
 
+const isActiveCustomer = (customer) => {
+  if (typeof customer?.active === "boolean") return customer.active;
+  if (typeof customer?.isActive === "boolean") return customer.isActive;
+
+  const status = String(
+    customer?.subscription_status ||
+      customer?.subscriptionStatus ||
+      customer?.payment_status ||
+      customer?.paymentStatus ||
+      customer?.accountStatus ||
+      customer?.status ||
+      ""
+  )
+    .trim()
+    .toLowerCase();
+
+  if (/(expired|inactive|cancelled|canceled)/.test(status)) return false;
+  if (/(active|paid)/.test(status)) return true;
+  return false;
+};
+
+const normalizeErpCustomer = (customer) => ({
+  ...customer,
+  customer_name: customer.customer_name || customer.name || customer.userName || "",
+  company_name: customer.company_name || customer.companyName || customer.company?.name || "",
+  subscription_plan:
+    customer.subscription_plan || customer.subscriptionPlan || customer.plan || customer.package || "",
+  active: isActiveCustomer(customer),
+});
+
 const leadToCustomer = (lead) => ({
   id: lead.id,
   customer_name: lead.full_name || lead.company || "Unnamed customer",
@@ -94,7 +124,7 @@ useEffect(() => {
 
     setErpCustomers(
       erpCustomersResult.status === "fulfilled"
-        ? unwrapCustomerList(erpCustomersResult.value.data)
+        ? unwrapCustomerList(erpCustomersResult.value.data).map(normalizeErpCustomer)
         : []
     );
 

@@ -249,7 +249,7 @@ const sendSubscriptionExpiredEmail = async ({ name, email, companyName }) => {
         <p>Your subscription has expired.</p>
         <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:16px;margin:20px 0">
           <p style="margin:0 0 8px"><strong>Company Name:</strong> ${companyName || "N/A"}</p>
-          <p style="margin:0 0 8px">CRM access is now inactive.</p>
+         
           <p style="margin:0">ERP access is now inactive.</p>
         </div>
         <p>Please renew your subscription to reactivate services.</p>
