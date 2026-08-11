@@ -1,0 +1,73 @@
+export const techStats = [
+  {
+    label:    "Total Ticket",
+    value:    "45",
+    sub:      "128 this Week",
+    badge:    "+42.4%",
+    badgeType: "up",
+  },
+  {
+    label:    "In Progress",
+    value:    "1,328",
+    sub:      "-23 this week",
+    badge:    "+42.4%",
+    badgeType: "up",
+  },
+  {
+    label:    "Request Ticket",
+    value:    "24.6%",
+    sub:      "from last month",
+    badge:    "+42.1%",
+    badgeType: "up",
+  },
+  {
+    label:    "Incident Ticket",
+    value:    "186",
+    sub:      "this week",
+    badge:    "-2.4%",
+    badgeType: "down",
+  },
+];
+
+export const initialTickets = [
+  {
+    id:          "#T-001",
+    ticketNo:    "Rahul",
+    type:        "Incident Ticket",
+    clientName:  "Admin",
+    status:      "Open",
+    description: "Server down issue",
+    assignTo:    "John",
+    date:        "02/05/26",
+  },
+  {
+    id:          "#T-002",
+    ticketNo:    "Priya",
+    type:        "Request Ticket",
+    clientName:  "ConsTech Ltd",
+    status:      "In progress",
+    description: "New feature request",
+    assignTo:    "Sara",
+    date:        "05/05/26",
+  },
+  {
+    id:          "#T-003",
+    ticketNo:    "Arjun",
+    type:        "Incident Ticket",
+    clientName:  "BuildCo",
+    status:      "Resolved",
+    description: "Login bug fix",
+    assignTo:    "Mike",
+    date:        "08/05/26",
+  },
+  {
+    id:          "#T-004",
+    ticketNo:    "Sneha",
+    type:        "Request Ticket",
+    clientName:  "DesignHub",
+    status:      "Open",
+    description: "UI improvement",
+    assignTo:    "Lisa",
+    date:        "10/05/26",
+  },
+];
