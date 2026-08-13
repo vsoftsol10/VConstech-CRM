@@ -283,65 +283,87 @@ const handleActiveDuplicateLead = async ({ duplicate, values, req }) => {
 };
 
 // ── POST create lead ────────────────────────────────────────────────────────
-const createLead = async (req, res) => {
-  try {
-    const { values, errors } = validateLeadPayload(req.body);
-    if (Object.keys(errors).length > 0) return sendValidationError(res, errors);
-    const { followUpDate, followUpTime, reminderEnabled } = getReminderFields(req.body);
+const createLeadRecord = async (body, options = {}) => {
+  const req = options.req || { body, user: options.user || null };
+  const { values, errors } = validateLeadPayload(body);
+  if (Object.keys(errors).length > 0) {
+    const error = new Error("Please fix the highlighted fields.");
+    error.status = 400;
+    error.errors = errors;
+    throw error;
+  }
 
-    const duplicate = await findLeadDuplicate(values);
-    let createStatus = 201;
-    let previousLeadId = null;
-    if (duplicate) {
-      const duplicateStatus = normalizeStatus(duplicate.status);
-      const alreadyCustomerDuplicate =
-        duplicate.has_customer === true || ALREADY_CUSTOMER_DUPLICATE_STATUSES.has(duplicateStatus);
-      const isActiveDuplicate = ACTIVE_DUPLICATE_STATUSES.has(duplicateStatus);
-      const shouldCreateNewLead =
-        !isActiveDuplicate &&
-        !alreadyCustomerDuplicate &&
-        REOPEN_AS_NEW_LEAD_STATUSES.has(duplicateStatus);
+  const { followUpDate, followUpTime, reminderEnabled } = getReminderFields(body);
+  const duplicate = await findLeadDuplicate(values);
+  let createStatus = 201;
+  let previousLeadId = null;
+  if (duplicate) {
+    const duplicateStatus = normalizeStatus(duplicate.status);
+    const alreadyCustomerDuplicate =
+      duplicate.has_customer === true || ALREADY_CUSTOMER_DUPLICATE_STATUSES.has(duplicateStatus);
+    const isActiveDuplicate = ACTIVE_DUPLICATE_STATUSES.has(duplicateStatus);
+    const shouldCreateNewLead =
+      !isActiveDuplicate &&
+      !alreadyCustomerDuplicate &&
+      REOPEN_AS_NEW_LEAD_STATUSES.has(duplicateStatus);
 
-      if (alreadyCustomerDuplicate) {
-        return res.status(200).json({
+    if (alreadyCustomerDuplicate) {
+      return {
+        statusCode: 200,
+        body: {
           success: true,
           alreadyCustomer: true,
           leadId: duplicate.id,
           message: "You are already a Vconstech customer.",
-        });
-      }
+        },
+      };
+    }
 
-      if (isActiveDuplicate) {
-        await handleActiveDuplicateLead({ duplicate, values, req });
+    if (isActiveDuplicate) {
+      await handleActiveDuplicateLead({ duplicate, values, req });
 
-        return res.status(200).json({
+      return {
+        statusCode: 200,
+        body: {
           success: true,
           duplicate: true,
           leadId: duplicate.id,
           message: "Existing lead updated successfully.",
-        });
-      }
-
-      if (!shouldCreateNewLead) {
-        return res.status(409).json({
-          emailExists: normalizeEmail(duplicate.email) === values.email,
-          phoneExists: normalizePhone(duplicate.phone) === values.phone,
-        });
-      }
-
-      createStatus = 200;
-      previousLeadId = duplicate.id;
+        },
+      };
     }
 
-    const lead = await insertLead(
-      pool,
-      values,
-      { followUpDate, followUpTime, reminderEnabled },
-      { previousLeadId }
-    );
+    if (!shouldCreateNewLead) {
+      const error = new Error("Duplicate lead found.");
+      error.status = 409;
+      error.body = {
+        emailExists: normalizeEmail(duplicate.email) === values.email,
+        phoneExists: normalizePhone(duplicate.phone) === values.phone,
+      };
+      throw error;
+    }
 
-    res.status(createStatus).json({ success: true, lead });
+    createStatus = 200;
+    previousLeadId = duplicate.id;
+  }
+
+  const lead = await insertLead(
+    pool,
+    values,
+    { followUpDate, followUpTime, reminderEnabled },
+    { previousLeadId }
+  );
+
+  return { statusCode: createStatus, body: { success: true, lead } };
+};
+
+const createLead = async (req, res) => {
+  try {
+    const result = await createLeadRecord(req.body, { req });
+    res.status(result.statusCode).json(result.body);
   } catch (err) {
+    if (err.errors) return sendValidationError(res, err.errors);
+    if (err.status === 409 && err.body) return res.status(409).json(err.body);
     console.log(err.message);
     res.status(500).json({ success: false, message: err.message });
   }
@@ -537,6 +559,7 @@ const deleteLead = async (req, res) => {
 
 module.exports = {
   createLead,
+  createLeadRecord,
   getAllLeads,
   getLeadById,
   updateLead,

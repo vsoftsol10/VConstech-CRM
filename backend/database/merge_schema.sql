@@ -172,3 +172,17 @@ SET last_number = GREATEST(ticket_number_counters.last_number, EXCLUDED.last_num
 CREATE UNIQUE INDEX IF NOT EXISTS tickets_ticket_number_unique
 ON tickets (ticket_number)
 WHERE ticket_number IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS email_processed_messages (
+  id bigserial PRIMARY KEY,
+  message_id text NOT NULL UNIQUE,
+  classification_type text NOT NULL,
+  related_type text NULL,
+  related_id text NULL,
+  sender_email text NULL,
+  subject text NULL,
+  created_at timestamp without time zone DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS email_processed_messages_created_idx
+ON email_processed_messages (created_at DESC);

@@ -118,90 +118,100 @@ const normalizeTicket = (body = {}) => ({
   short_description: body.short_description || body.description || null,
   notes: body.notes || null,
   due_date: body.due_date || null,
+  email: body.email || null,
+  thread_id: body.thread_id || null,
+  message_id: body.message_id || null,
 });
+
+const createTicketRecord = async (body) => {
+  const ticket = normalizeTicket(body);
+
+  if (!ticket.caller || !ticket.short_description) {
+    const error = new Error("Caller and description are required.");
+    error.status = 400;
+    throw error;
+  }
+  if (!ticket.ticket_type) {
+    const error = new Error("Ticket type must be either Incident or Request.");
+    error.status = 400;
+    throw error;
+  }
+
+  const assignee = await resolveAssignee(ticket.assigned_to);
+  if (ticket.assigned_to && !assignee) {
+    const error = new Error("Assigned team member not found.");
+    error.status = 404;
+    throw error;
+  }
+  if (assignee && !validateDepartment(assignee, ticket.department)) {
+    const error = new Error(`Team member does not belong to ${ticket.department} department.`);
+    error.status = 400;
+    throw error;
+  }
+
+  const openedBy = await resolveAssignee(ticket.opened_by);
+  const client = await pool.connect();
+  let data;
+  try {
+    await client.query("BEGIN");
+    const ticket_number = await generateTicketNumber(client, ticket.ticket_type);
+    const result = await client.query(
+      `INSERT INTO tickets
+       (ticket_number, ticket_type, caller, opened_by, assigned_to, location, contact_type,
+        category, urgency, state, short_description, notes, due_date, department, email, thread_id, message_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+       RETURNING id`,
+      [
+        ticket_number,
+        ticket.ticket_type,
+        ticket.caller,
+        openedBy?.id || null,
+        assignee?.id || null,
+        ticket.location,
+        ticket.contact_type,
+        ticket.category,
+        ticket.urgency,
+        ticket.state,
+        ticket.short_description,
+        ticket.notes,
+        ticket.due_date,
+        ticket.department,
+        ticket.email,
+        ticket.thread_id,
+        ticket.message_id,
+      ]
+    );
+
+    data = await getTicketRow(result.rows[0].id, client);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  if (assignee) {
+    await createNotification({
+      teamMemberId: assignee.id,
+      title: "Ticket assigned",
+      message: `${data.ticket_number} has been assigned to you.`,
+      type: "ticket_assignment",
+      relatedType: "ticket",
+      relatedId: data.id,
+      link: `/ticket?ticket=${data.id}`,
+    });
+  }
+
+  return data;
+};
 
 const createTicket = async (req, res) => {
   try {
-    const ticket = normalizeTicket(req.body);
-
-    if (!ticket.caller || !ticket.short_description) {
-      return res.status(400).json({
-        success: false,
-        error: "Caller and description are required.",
-      });
-    }
-    if (!ticket.ticket_type) {
-      return res.status(400).json({
-        success: false,
-        error: "Ticket type must be either Incident or Request.",
-      });
-    }
-
-    const assignee = await resolveAssignee(ticket.assigned_to);
-    if (ticket.assigned_to && !assignee) {
-      return res.status(404).json({ success: false, error: "Assigned team member not found." });
-    }
-    if (assignee && !validateDepartment(assignee, ticket.department)) {
-      return res.status(400).json({
-        success: false,
-        error: `Team member does not belong to ${ticket.department} department.`,
-      });
-    }
-
-    const openedBy = await resolveAssignee(ticket.opened_by);
-    const client = await pool.connect();
-    let data;
-    try {
-      await client.query("BEGIN");
-      const ticket_number = await generateTicketNumber(client, ticket.ticket_type);
-      const result = await client.query(
-        `INSERT INTO tickets
-         (ticket_number, ticket_type, caller, opened_by, assigned_to, location, contact_type,
-          category, urgency, state, short_description, notes, due_date, department)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-         RETURNING id`,
-        [
-          ticket_number,
-          ticket.ticket_type,
-          ticket.caller,
-          openedBy?.id || null,
-          assignee?.id || null,
-          ticket.location,
-          ticket.contact_type,
-          ticket.category,
-          ticket.urgency,
-          ticket.state,
-          ticket.short_description,
-          ticket.notes,
-          ticket.due_date,
-          ticket.department,
-        ]
-      );
-
-      data = await getTicketRow(result.rows[0].id, client);
-      await client.query("COMMIT");
-    } catch (err) {
-      await client.query("ROLLBACK");
-      throw err;
-    } finally {
-      client.release();
-    }
-
-    if (assignee) {
-      await createNotification({
-        teamMemberId: assignee.id,
-        title: "Ticket assigned",
-        message: `${data.ticket_number} has been assigned to you.`,
-        type: "ticket_assignment",
-        relatedType: "ticket",
-        relatedId: data.id,
-        link: `/ticket?ticket=${data.id}`,
-      });
-    }
-
+    const data = await createTicketRecord(req.body);
     res.status(201).json({ success: true, message: "Ticket created successfully.", data });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 };
 
@@ -558,6 +568,7 @@ const getTicketStats = async (_req, res) => {
 module.exports = {
   assignTicket,
   createTicket,
+  createTicketRecord,
   deleteTicket,
   getAllTickets,
   getTicketById,

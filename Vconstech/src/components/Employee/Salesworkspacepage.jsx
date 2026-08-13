@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { useLocation } from "react-router-dom";
 import {
@@ -291,6 +291,7 @@ export default function SalesWorkspacePage() {
   const [error, setError] = useState("");
 
   const location = useLocation();
+  const viewSwitchRef = useRef(null);
 
   // ---------------- LOAD ----------------
   const loadWorkspace = async (emp) => {
@@ -325,6 +326,17 @@ export default function SalesWorkspacePage() {
     const emp = JSON.parse(stored);
     setEmployee(emp);
     loadWorkspace(emp);
+  }, []);
+
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (viewSwitchRef.current && !viewSwitchRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
   // ---------------- STATUS UPDATE ----------------
@@ -454,7 +466,7 @@ export default function SalesWorkspacePage() {
           </button>
 
           {/* VIEW SWITCH */}
-          <div className="relative">
+          <div className="relative" ref={viewSwitchRef}>
             <button
               onClick={() => setOpen(!open)}
               className="px-3 py-2 border rounded-lg text-sm"

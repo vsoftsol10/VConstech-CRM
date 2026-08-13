@@ -1,6 +1,8 @@
 require("dotenv").config();
 const express = require("express");
+
 const cors = require("cors");
+const { startEmailListener } = require("./services/emailService");
 const ensureMergeSchema = require("./database/ensureSchema");
 // Load the follow‑up reminder scheduler (runs daily)
 require('./scripts/followUpReminder');
@@ -58,7 +60,11 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5001;
 ensureMergeSchema()
   .then(() => {
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    app.listen(PORT, async () => {
+  console.log(`Server running on port ${PORT}`);
+
+  await startEmailListener();
+});
   })
   .catch((err) => {
     console.error("Schema check failed:", err.message);

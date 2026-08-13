@@ -129,6 +129,7 @@ const Header = ({ setSidebarOpen }) => {
 
   const searchRef = useRef(null);
   const profileRef = useRef(null);
+  const notificationRef = useRef(null);
   const navigate  = useNavigate();
 
   const fetchNotifications = async (emp = employee) => {
@@ -159,6 +160,8 @@ const Header = ({ setSidebarOpen }) => {
         setShowResults(false);
       if (profileRef.current && !profileRef.current.contains(e.target))
         setShowProfileMenu(false);
+      if (notificationRef.current && !notificationRef.current.contains(e.target))
+        setShowNotifications(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -318,7 +321,7 @@ useEffect(() => {
       <span className="hidden sm:block">Create Ticket</span>
     </button>
 
-          <div className="relative">
+          <div className="relative" ref={notificationRef}>
             <button
               onClick={() => {
                 setShowNotifications((v) => !v);

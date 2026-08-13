@@ -246,6 +246,24 @@ const ensureMergeSchema = async () => {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS email_processed_messages (
+      id bigserial PRIMARY KEY,
+      message_id text NOT NULL UNIQUE,
+      classification_type text NOT NULL,
+      related_type text NULL,
+      related_id text NULL,
+      sender_email text NULL,
+      subject text NULL,
+      created_at timestamp without time zone DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS email_processed_messages_created_idx
+    ON email_processed_messages (created_at DESC)
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS task_updates (
       id bigserial PRIMARY KEY,
       task_id bigint NULL,

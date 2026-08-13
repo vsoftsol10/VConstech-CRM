@@ -14,7 +14,11 @@ const CHANNELS = [
   { value: "whatsapp",  label: "WhatsApp" },
   { value: "linkedin",  label: "LinkedIn" },
   { value: "instagram", label: "Instagram" },
+  { value: "website",   label: "Website" },
+  { value: "meta ads",  label: "Meta Ads" },
+  { value: "erp",       label: "ERP" },
 ];
+const DEFAULT_CHANNEL = CHANNELS[0];
 const STATUSES = [
   { value: "new",       label: "New" },
   { value: "contacted", label: "Contacted" },
@@ -34,6 +38,36 @@ const PLANS = [
 ];
 
 const todayInput = new Date().toISOString().split("T")[0];
+
+const toSelectOption = (options, value) => {
+  const rawValue = String(value || "").trim();
+  if (!rawValue) return null;
+
+  const normalizedValue = rawValue.toLowerCase();
+  const existingOption = options.find(
+    (option) => String(option.value).toLowerCase() === normalizedValue
+  );
+
+  if (existingOption) return existingOption;
+
+  return {
+    value: rawValue,
+    label: rawValue
+      .split(/\s+/)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(" "),
+  };
+};
+
+const withSelectedOption = (options, selectedOption) => {
+  if (!selectedOption) return options;
+
+  const hasOption = options.some(
+    (option) => String(option.value).toLowerCase() === String(selectedOption.value).toLowerCase()
+  );
+
+  return hasOption ? options : [selectedOption, ...options];
+};
 
 const inputCls = (hasError) =>
   `w-full px-3 py-2.5 text-sm border rounded-xl bg-gray-50 outline-none transition-colors ${
@@ -100,7 +134,7 @@ const Field = ({ label, error, children }) => (
 
 export default function AddLeadModal({ onClose, onSubmit, editData = null }) {
   const [form, setForm] = useState({
-    fullName: "", company: "", channel: null, status: null,
+    fullName: "", company: "", channel: DEFAULT_CHANNEL, status: null,
     phone: "", email: "", date: "", plan: { value: "none", label: "None" },
     assignedTo: null, address: "", location: "", requirements: "", workNotes: "",
   });
@@ -109,6 +143,7 @@ export default function AddLeadModal({ onClose, onSubmit, editData = null }) {
   const [errors, setErrors]                 = useState({});
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting]         = useState(false);
+  const channelOptions = withSelectedOption(CHANNELS, form.channel);
 
   // Load sales team members
   useEffect(() => {
@@ -132,9 +167,9 @@ export default function AddLeadModal({ onClose, onSubmit, editData = null }) {
       setForm({
         fullName:     editData.full_name    || "",
         company:      editData.company      || "",
-        channel:      CHANNELS.find(c => c.value.toLowerCase() === String(editData.channel).toLowerCase()) || null,
-        status:       STATUSES.find(s => s.value.toLowerCase() === String(editData.status).toLowerCase())  || null,
-        plan:         PLANS.find(p => p.value.toLowerCase()    === String(editData.plan).toLowerCase())    || null,
+        channel:      toSelectOption(CHANNELS, editData.channel),
+        status:       toSelectOption(STATUSES, editData.status),
+        plan:         toSelectOption(PLANS, editData.plan),
         assignedTo:   salesMembers.find(m => String(m.value)   === String(editData.assigned_to))           || null,
         workNotes:    editData.work_notes   || "",
         phone:        editData.phone        || "",
@@ -340,7 +375,7 @@ setFormError("");
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Channel" error={errors.channel}>
                 <Select styles={selectStyles(errors.channel)} placeholder="Select channel"
-                  value={form.channel} onChange={setSelect("channel")} options={CHANNELS} />
+                  value={form.channel} onChange={setSelect("channel")} options={channelOptions} />
               </Field>
               <Field label="Status" error={errors.status}>
                 <Select styles={selectStyles(errors.status)} placeholder="Select status"
